@@ -80,8 +80,8 @@ def dht_propagate_single(u, wvnum, k_r, dz_prop, TM, Nr_end, j_vec):
 
         u_ht = np.dot(TM.astype(u_loc.dtype), u_loc/j_vec, out=u_ht)
         u_ht *= np.exp( 1j * dz_prop * np.sqrt(wvnum[ikz]**2 - k_r**2) )
-        u_iht = np.dot(TM[:Nr_end].astype(u_ht.dtype), u_ht/j_vec, out=u_iht)
-        u[ikz, :Nr_end] = u_iht
+        u_iht = np.dot(TM[:Nr_end].astype(u_ht.dtype), u_ht, out=u_iht) 
+        u[ikz, :Nr_end] = u_iht * j_vec[:Nr_end]
 
     u = u[:, :Nr_end]
 
