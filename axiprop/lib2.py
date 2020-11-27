@@ -1,21 +1,15 @@
 import numpy as np
-from scipy.constants import c, e, m_e, epsilon_0
+from scipy.constants import c
 from scipy.integrate import solve_ivp
 from scipy.special import j0, j1, jn_zeros
-from scipy.linalg import pinv2
 from numba import njit, prange
 
 def init_radial_axes(Nr, Rmax, method='j_zeros'):
 
-    if method=='j_zeros':
-        alphas = jn_zeros(0, Nr+1)
-        alpha_np1 = alphas[-1]
-        alphas = alphas[:-1]
-        r_ax = Rmax * alphas/alpha_np1
-
-    elif method=='uniform':
-        alphas = jn_zeros(0, Nr)
-        r_ax = Rmax * np.r_[0:1:Nr*1j]
+    alphas = jn_zeros(0, Nr+1)
+    alpha_np1 = alphas[-1]
+    alphas = alphas[:-1]
+    r_ax = Rmax * alphas/alpha_np1
 
     kr_ax = alphas/Rmax
 
@@ -31,7 +25,7 @@ def init_freq_axis(lam0, freq_width, Nfreq):
     wvlgth = 2*np.pi / wvnum
     return freq, wvnum, wvlgth, freq_symm
 
-def get_mirror_phase_approx(f0, d0, r, Rmax, wvnum, freq_symm,
+def mirror_analytic(f0, d0, r, Rmax, wvnum, freq_symm,
                             a_hole=None, tau_ret=None):
 
     s_ax = r**2/4/f0 - d0/(8*f0**2*Rmax**2)*r**4 \
@@ -41,7 +35,7 @@ def get_mirror_phase_approx(f0, d0, r, Rmax, wvnum, freq_symm,
     phase_on_mirror = np.exp(1j*phase_on_mirror)
     return phase_on_mirror
 
-def get_mirror_phase_num(f0, d0, r, Rmax, wvnum, freq_symm,
+def mirror_numeric(f0, d0, r, Rmax, wvnum, freq_symm,
                          a_hole=False, tau_ret=None):
 
     sag_equation = lambda r, s : (s - (f0 + d0 * np.sqrt(r/Rmax)) +
@@ -58,41 +52,35 @@ def get_mirror_phase_num(f0, d0, r, Rmax, wvnum, freq_symm,
 
     return phase_on_mirror
 
-def dht_init(r_start, r_end, k_r):
+def dht_init(Nr, Rmax):
 
-    if r_start.size<r_end.size:
-        print('The output Nr should not exceed the input one (memory size)')
-        return None, None
+    alpha = jn_zeros(0, Nr+1)
+    alpha_np1 = alpha[-1]
+    alpha = alpha[:-1]
 
-    Nr_start = r_start.size
-    alphas = jn_zeros(0, Nr_start)
-    jp1 = np.abs(j1(alphas))
+    denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
+    j_vec = np.abs(j1(alpha))/Rmax
 
-    Rmax_start = r_start.max()
-    invTM = j0( r_start[:,None] * k_r[None, :] ) \
-        / ( jp1[None, :]**2 * Rmax_start * np.pi)
+    TM = 2 * j0(alpha[:,None]* alpha[None,:]/alpha_np1) / denominator
 
-    TM = pinv2(invTM,check_finite=False)
+    return TM, j_vec
 
-    Rmax_end = r_end.max()
-    invTM = j0( r_end[:,None] * k_r[None, :] ) \
-        / ( jp1[None, :]**2 * Rmax_end * np.pi)
 
-    return TM, invTM
+def dht_propagate_single(u, wvnum, k_r, dz_prop, TM, Nr_end, j_vec):
 
-def dht_propagate_single(u, wvnum, dz_prop, TM, invTM, k_r):
-
-    Nr_end = invTM.shape[0]
     Nz = u.shape[0]
+    Nr = u.shape[1]
+
     u_loc = np.zeros(u.shape[1], dtype=u.dtype)
     u_ht = np.zeros_like(u_loc)
     u_iht = np.zeros(Nr_end, dtype=u.dtype)
 
     for ikz in range(Nz):
         u_loc[:] = u[ikz,:]
-        u_ht = np.dot(TM.astype(u_loc.dtype), u_loc, out=u_ht)
+
+        u_ht = np.dot(TM.astype(u_loc.dtype), u_loc/j_vec, out=u_ht)
         u_ht *= np.exp( 1j * dz_prop * np.sqrt(wvnum[ikz]**2 - k_r**2) )
-        u_iht = np.dot(invTM.astype(u_ht.dtype), u_ht, out=u_iht)
+        u_iht = np.dot(TM[:Nr_end].astype(u_ht.dtype), u_ht/j_vec, out=u_iht)
         u[ikz, :Nr_end] = u_iht
 
     u = u[:, :Nr_end]

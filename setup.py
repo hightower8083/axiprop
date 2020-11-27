@@ -20,7 +20,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='axiprop',
-    version=LPICS.__version__,
+    version=axiprop.__version__,
     description='optical propagation tool for axiparabola',
     long_description=long_description,
     maintainer='Igor Andriyash',
