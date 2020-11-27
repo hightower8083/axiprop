@@ -5,16 +5,6 @@ from scipy.special import j0, j1, jn_zeros
 from numba import njit, prange
 
 
-def init_freq_axis(lam0, freq_width, Nfreq):
-
-    k_las = 2 * np.pi / lam0
-    freq_las = k_las * c
-    freq_symm = 4 * freq_width * np.linspace(-1, 1, Nfreq)
-    freq = freq_symm + freq_las
-    wvnum = freq / c
-    wvlgth = 2*np.pi / wvnum
-    return freq, wvnum, wvlgth, freq_symm
-
 def mirror_analytic(f0, d0, r, Rmax, wvnum, freq_symm,
                             a_hole=None, tau_ret=None):
 
@@ -59,14 +49,16 @@ def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
 
 
 class Propagator:
-    def __init__(self, Nr, Rmax):
+    def __init__(self, Rmax, omega_width, Nr, Nkz, lambda0):
+
+        self.Rmax = Rmax
+        self.Nr = Nr
+        self.Nkz = Nkz
 
         alpha = jn_zeros(0, Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self.Nr = Nr
-        self.Rmax = Rmax
         self.r = Rmax * alpha/alpha_np1
         self.kr = alpha/Rmax
         self._j = np.abs(j1(alpha))/Rmax
@@ -74,16 +66,24 @@ class Propagator:
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]* alpha[None,:]/alpha_np1) / denominator
 
-    def step(self, u, dz, wvnum, Nr_new=None):
+        self.k0 = 2 * np.pi / lambda0
+        self.omega0 = self.k0 * c
+        self.omega_symm = 4 * omega_width * np.linspace(-1, 1, Nkz)
+        self.omega = self.omega_symm + self.omega0
+        self.kz = self.omega / c
+        self.wvlgth = 2*np.pi / self.kz
+
+    def step(self, u, dz, Nr_new=None):
 
         Nz = u.shape[0]
         assert (u.shape[1]==self.Nr)
         udtype = u.dtype
         if Nr_new is None:
             Nr_new = self.Nr
+        self.r_new = self.r[:Nr_new]
 
         u_loc = np.zeros(self.Nr, dtype=udtype)
-        u_ht = np.zeros(u_loc, dtype=udtype)
+        u_ht = np.zeros(self.Nr, dtype=udtype)
         u_iht = np.zeros(Nr_new, dtype=udtype)
 
         for ikz in range(Nz):
@@ -92,7 +92,7 @@ class Propagator:
             u_ht = np.dot(self.TM.astype(udtype),
                           u_loc/self._j.astype(udtype),
                           out=u_ht)
-            u_ht *= np.exp( 1j * dz * np.sqrt(wvnum[ikz]**2 - self.kr**2) )
+            u_ht *= np.exp( 1j * dz * np.sqrt(self.kz[ikz]**2 - self.kr**2) )
             u_iht = np.dot(self.TM[:Nr_new].astype(udtype), u_ht, out=u_iht)
             u[ikz, :Nr_new] = u_iht * self._j[:Nr_new].astype(udtype)
 
@@ -108,6 +108,7 @@ class Propagator:
         udtype = u.dtype
         if Nr_new is None:
             Nr_new = self.Nr
+        self.r_new = self.r[:Nr_new]
 
         u_loc = np.zeros(self.Nr, dtype=udtype)
         u_ht = np.zeros(self.Nr, dtype=udtype)
