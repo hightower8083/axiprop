@@ -12,11 +12,11 @@ class Propagator:
         self.Nkz = Nkz
 
         alpha = jn_zeros(0, Nr+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
+        self.alpha_np1 = alpha[-1]
+        self.alpha = alpha[:-1]
 
-        self.r = Rmax * alpha/alpha_np1
-        self.kr = alpha/Rmax
+        self.r = Rmax * self.alpha / self.alpha_np1
+        self.kr = self.alpha/Rmax
 
         self.k0 = 2 * np.pi / lambda0
         self.omega0 = self.k0 * c
@@ -29,9 +29,11 @@ class Propagator:
 
     def create_DHT(self):
 
-        self._j = np.abs(j1(alpha))/Rmax
-        denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
-        self.TM = 2 * j0(alpha[:,None]* alpha[None,:]/alpha_np1) / denominator
+        self._j = np.abs(j1(self.alpha))/self.Rmax
+        denominator = self.alpha_np1 * np.abs(j1(self.alpha[:,None])) \
+                     * np.abs(j1(self.alpha[None,:]))
+        self.TM = 2 * j0(self.alpha[:,None]*self.alpha[None,:]/self.alpha_np1) \
+                   / denominator
 
     def DHT(self, u_in, u_out):
 
@@ -41,7 +43,7 @@ class Propagator:
     def iDHT(self, u_in, u_out):
 
         Nr_new = u_out.size
-        u_out = np.dot(self.TM[:Nr_new].astype(self.dtype), u_int, out=u_out)
+        u_out = np.dot(self.TM[:Nr_new].astype(self.dtype), u_in, out=u_out)
         u_out *= self._j[:Nr_new]
         return u_out
 
