@@ -5,15 +5,11 @@ from scipy.linalg import pinv2
 
 class PropagatorCommon:
 
-    def init_kz(self, omega_width, Nkz, lambda0):
+    def init_kz(self, Lkz, Nkz, k0):
 
-        self.k0 = 2 * np.pi / lambda0
         self.Nkz = Nkz
-        self.omega0 = self.k0 * c
-        self.omega_symm = 4 * omega_width * np.linspace(-1., 1., Nkz)
-        self.omega = self.omega_symm + self.omega0
-        self.kz = self.omega / c
-        self.wvlgth = 2*np.pi / self.kz
+        self.kz = k0 + Lkz / 2 * np.linspace(-1., 1., Nkz)
+
         self.dtype = np.complex
 
     def step(self, u, dz):
@@ -66,10 +62,10 @@ class PropagatorCommon:
 
 class PropagatorSymmetric(PropagatorCommon):
 
-    def __init__(self, Rmax, omega_width, Nr, Nkz, lambda0,
+    def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
                  Nr_new=None, dtype=np.complex):
 
-        self.init_kz(omega_width, Nkz, lambda0)
+        self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_and_DHT(Rmax, Nr, Nr_new, dtype)
 
     def init_rkr_and_DHT(self, Rmax, Nr, Nr_new, dtype):
@@ -111,10 +107,10 @@ class PropagatorSymmetric(PropagatorCommon):
 
 class PropagatorResampling(PropagatorCommon):
 
-    def __init__(self, Rmax, omega_width, Nr, Nkz, lambda0,
+    def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
                  Rmax_new=None, Nr_new=None, dtype=np.complex):
 
-        self.init_kz(omega_width, Nkz, lambda0)
+        self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_and_DHT(Rmax, Nr, Rmax_new, Nr_new, dtype)
 
     def init_rkr_and_DHT(self, Rmax, Nr, Rmax_new, Nr_new, dtype):

@@ -2,19 +2,19 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from numba import njit, prange
 
+def mirror_parabolic(f0, r, kz):
 
-def mirror_analytic(f0, d0, r, Rmax, wvnum, freq_symm,
-                            a_hole=None, tau_ret=None):
+    s_ax = r**2/4/f0
+    return np.exp(-2j * s_ax[None,:] * kz[:,None])
+
+def mirror_axiparabola(f0, d0, r, kz):
 
     s_ax = r**2/4/f0 - d0/(8*f0**2*Rmax**2)*r**4 \
-        + d0*(Rmax**2+8*f0*d0)/(96*f0**4*Rmax**4)*r**6
+         + d0*(Rmax**2+8*f0*d0)/(96*f0**4*Rmax**4)*r**6
 
-    phase_on_mirror = -2 * s_ax[None,:] * wvnum[:,None]
-    phase_on_mirror = np.exp(1j*phase_on_mirror)
-    return phase_on_mirror
+    return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
-def mirror_numeric(f0, d0, r, Rmax, wvnum, freq_symm,
-                         a_hole=False, tau_ret=None):
+def mirror_axiparabola2(f0, d0, r, kz):
 
     sag_equation = lambda r, s : (s - (f0 + d0 * np.sqrt(r/Rmax)) +
             np.sqrt(r**2 + ((f0 + d0 * np.sqrt(r/Rmax) - s)**2))/r)
@@ -25,10 +25,7 @@ def mirror_numeric(f0, d0, r, Rmax, wvnum, freq_symm,
                       t_eval=r
                     ).y.flatten()
 
-    phase_on_mirror = -2 * s_ax[None,:] * wvnum[:,None]
-    phase_on_mirror = np.exp(1j*phase_on_mirror)
-
-    return phase_on_mirror
+    return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
 @njit(parallel=True, fastmath=True)
 def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
