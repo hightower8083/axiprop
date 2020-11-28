@@ -1,140 +1,157 @@
 import numpy as np
-from scipy.constants import c, e, m_e, epsilon_0
-from scipy.integrate import solve_ivp
+from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
 from scipy.linalg import pinv2
-from numba import njit, prange
 
-def init_radial_axes(Nr, Rmax, method='j_zeros'):
+class PropagatorCommon:
 
-    if method=='j_zeros':
-        alphas = jn_zeros(0, Nr+1)
-        alpha_np1 = alphas[-1]
-        alphas = alphas[:-1]
-        r_ax = Rmax * alphas/alpha_np1
+    def init_kz(self, omega_width, Nkz, lambda0):
 
-    elif method=='uniform':
-        alphas = jn_zeros(0, Nr)
-        r_ax = Rmax * np.r_[0:1:Nr*1j]
+        self.k0 = 2 * np.pi / lambda0
+        self.Nkz = Nkz
+        self.omega0 = self.k0 * c
+        self.omega_symm = 4 * omega_width * np.linspace(-1., 1., Nkz)
+        self.omega = self.omega_symm + self.omega0
+        self.kz = self.omega / c
+        self.wvlgth = 2*np.pi / self.kz
+        self.dtype = np.complex
 
-    kr_ax = alphas/Rmax
+    def step(self, u, dz):
 
-    return r_ax, kr_ax
+        assert u.shape[0] == self.Nkz
+        assert u.shape[1] == self.Nr
+        assert self.dtype == u.dtype
 
-def init_freq_axis(lam0, freq_width, Nfreq):
+        for ikz in range(self.Nkz):
+            self.u_loc[:] = u[ikz,:]
+            self.u_ht = self.DHT(self.u_loc, self.u_ht)
+            self.u_ht *= np.exp(1j * dz * np.sqrt(self.kz[ikz]**2 - self.kr**2))
+            self.u_iht = self.iDHT(self.u_ht, self.u_iht)
+            u[ikz, :self.Nr_new] = self.u_iht
 
-    k_las = 2 * np.pi / lam0
-    freq_las = k_las * c
-    freq_symm = 4 * freq_width * np.linspace(-1, 1, Nfreq)
-    freq = freq_symm + freq_las
-    wvnum = freq / c
-    wvlgth = 2*np.pi / wvnum
-    return freq, wvnum, wvlgth, freq_symm
+        u = u[:, :self.Nr_new]
 
-def get_mirror_phase_approx(f0, d0, r, Rmax, wvnum, freq_symm,
-                            a_hole=None, tau_ret=None):
+        return u
 
-    s_ax = r**2/4/f0 - d0/(8*f0**2*Rmax**2)*r**4 \
-        + d0*(Rmax**2+8*f0*d0)/(96*f0**4*Rmax**4)*r**6
+    def steps(self, u, dz, verbose=True):
 
-    phase_on_mirror = -2 * s_ax[None,:] * wvnum[:,None]
-    phase_on_mirror = np.exp(1j*phase_on_mirror)
-    return phase_on_mirror
+        Nsteps = len(dz)
+        if Nsteps==0:
+            return None
 
-def get_mirror_phase_num(f0, d0, r, Rmax, wvnum, freq_symm,
-                         a_hole=False, tau_ret=None):
+        assert u.shape[0] == self.Nkz
+        assert u.shape[1] == self.Nr
+        assert self.dtype == u.dtype
 
-    sag_equation = lambda r, s : (s - (f0 + d0 * np.sqrt(r/Rmax)) +
-            np.sqrt(r**2 + ((f0 + d0 * np.sqrt(r/Rmax) - s)**2))/r)
+        u_steps = np.empty((self.Nkz, self.Nr_new, Nsteps), dtype=self.dtype)
 
-    s_ax = solve_ivp( sag_equation,
-                      (r[0], r[-1]),
-                      [r[0]/(4*f0),],
-                      t_eval=r
-                    ).y.flatten()
+        if verbose:
+            print('Propagating:')
 
-    phase_on_mirror = -2 * s_ax[None,:] * wvnum[:,None]
-    phase_on_mirror = np.exp(1j*phase_on_mirror)
+        for ikz in range(self.Nkz):
+            self.u_loc[:] = u[ikz,:]
+            self.u_ht = self.DHT(self.u_loc, self.u_ht)
+            ik_loc = 1j * np.sqrt(self.kz[ikz]**2 - self.kr**2)
+            for i_step in range(Nsteps):
+                self.u_ht *= np.exp( dz[i_step] * ik_loc )
+                self.u_iht = self.iDHT(self.u_ht, self.u_iht)
+                u_steps[ikz, :, i_step] = self.u_iht
 
-    return phase_on_mirror
+                if verbose:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                      end='\r', flush=True)
 
-def dht_init(r_start, r_end, k_r):
+        return u_steps
 
-    if r_start.size<r_end.size:
-        print('The output Nr should not exceed the input one (memory size)')
-        return None, None
+class PropagatorSymmetric(PropagatorCommon):
 
-    Nr_start = r_start.size
-    alphas = jn_zeros(0, Nr_start)
-    jp1 = np.abs(j1(alphas))
+    def __init__(self, Rmax, omega_width, Nr, Nkz, lambda0,
+                 Nr_new=None, dtype=np.complex):
 
-    Rmax_start = r_start.max()
-    invTM = j0( r_start[:,None] * k_r[None, :] ) \
-        / ( jp1[None, :]**2 * Rmax_start * np.pi)
+        self.init_kz(omega_width, Nkz, lambda0)
+        self.init_rkr_and_DHT(Rmax, Nr, Nr_new, dtype)
 
-    TM = pinv2(invTM,check_finite=False)
+    def init_rkr_and_DHT(self, Rmax, Nr, Nr_new, dtype):
+        self.Rmax = Rmax
+        self.Nr = Nr
+        self.dtype = dtype
 
-    Rmax_end = r_end.max()
-    invTM = j0( r_end[:,None] * k_r[None, :] ) \
-        / ( jp1[None, :]**2 * Rmax_end * np.pi)
+        alpha = jn_zeros(0, Nr+1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
 
-    return TM, invTM
+        self.r = Rmax * alpha / alpha_np1
+        self.kr = alpha/Rmax
 
-def dht_propagate_single(u, wvnum, dz_prop, TM, invTM, k_r):
+        self._j = (np.abs(j1(alpha)) / Rmax).astype(dtype)
+        denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
+        self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
 
-    Nr_end = invTM.shape[0]
-    Nz = u.shape[0]
-    u_loc = np.zeros(u.shape[1], dtype=u.dtype)
-    u_ht = np.zeros_like(u_loc)
-    u_iht = np.zeros(Nr_end, dtype=u.dtype)
+        self.Nr_new = Nr_new
+        if self.Nr_new is None:
+            self.Nr_new = Nr
 
-    for ikz in range(Nz):
-        u_loc[:] = u[ikz,:]
-        u_ht = np.dot(TM.astype(u_loc.dtype), u_loc, out=u_ht)
-        u_ht *= np.exp( 1j * dz_prop * np.sqrt(wvnum[ikz]**2 - k_r**2) )
-        u_iht = np.dot(invTM.astype(u_ht.dtype), u_ht, out=u_iht)
-        u[ikz, :Nr_end] = u_iht
+        self.r_new = self.r[:self.Nr_new]
+        self.u_loc = np.zeros(self.Nr, dtype=dtype)
+        self.u_ht = np.zeros(self.Nr, dtype=dtype)
+        self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
-    u = u[:, :Nr_end]
+    def DHT(self, u_in, u_out):
 
-    return u
+        u_out = np.dot(self.TM.astype(self.dtype), u_in/self._j, out=u_out)
+        return u_out
 
-def dht_propagate_multi(u, wvnum, dz_steps, TM, invTM, k_r):
+    def iDHT(self, u_in, u_out):
 
-    Nsteps = len(dz_steps)
-    Nr_loc = invTM.shape[0]
-    Nr_in = u.shape[1]
-    Nz_loc = u.shape[0]
+        u_out = np.dot(self.TM[:self.Nr_new].astype(self.dtype),
+                       u_in, out=u_out)
+        u_out *= self._j[:self.Nr_new]
+        return u_out
 
-    u_multi = np.empty((Nz_loc, Nr_loc, Nsteps), dtype=u.dtype)
-    u_loc = np.zeros(Nr_in, dtype=u.dtype)
-    u_ht = np.zeros(Nr_in, dtype=u.dtype)
-    u_iht = np.zeros(Nr_loc, dtype=u.dtype)
+class PropagatorResampling(PropagatorCommon):
 
-    for ikz in range(Nz_loc):
-        u_loc[:] = u[ikz,:]
-        u_ht = np.dot(TM.astype(u_loc.dtype), u_loc, out=u_ht)
+    def __init__(self, Rmax, omega_width, Nr, Nkz, lambda0,
+                 Rmax_new=None, Nr_new=None, dtype=np.complex):
 
-        k_loc = np.sqrt(wvnum[ikz]**2-k_r**2)
+        self.init_kz(omega_width, Nkz, lambda0)
+        self.init_rkr_and_DHT(Rmax, Nr, Rmax_new, Nr_new, dtype)
 
-        for i_step in range(Nsteps):
-            u_ht = u_ht * np.exp( 1j * dz_steps[i_step] *k_loc )
-            u_iht = np.dot(invTM.astype(u_ht.dtype), u_ht, out=u_iht)
-            u_multi[ikz, :, i_step] = u_iht
+    def init_rkr_and_DHT(self, Rmax, Nr, Rmax_new, Nr_new, dtype):
+        self.Rmax = Rmax
+        self.Nr = Nr
+        self.dtype = dtype
 
-    return u_multi
+        alpha = jn_zeros(0, Nr+1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
 
-@njit(parallel=True, fastmath=True)
-def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
+        self.r = Rmax * alpha / alpha_np1
+        self.kr = alpha/Rmax
 
-    A_temp[:] = 0.0
-    Nw_loc = A_freqR.shape[0]
-    Nr_loc = A_freqR.shape[1]
-    Nt_loc = time_ax.size
+        self.Rmax_new = Rmax_new
+        if self.Rmax_new is None:
+            self.Rmax_new = Rmax
 
-    for it in prange(Nt_loc):
-        propag = np.exp(-1j*freq*time_ax[it])
-        for ir in range(Nr_loc):
-            A_temp[it] += np.real(A_freqR[:,ir] * propag).sum()
+        self.Nr_new = Nr_new
+        if self.Nr_new is None:
+            self.Nr_new = Nr
+        self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
 
-    return A_temp
+        invTM = j0(self.r[:,None] * self.kr[None,:])
+        self.TM = pinv2(invTM, check_finite=False)
+        self.invTM = j0(self.r_new[:,None] * self.kr[None,:])
+
+        self.u_loc = np.zeros(self.Nr, dtype=dtype)
+        self.u_ht = np.zeros(self.Nr, dtype=dtype)
+        self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
+
+    def DHT(self, u_in, u_out):
+
+        u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
+        return u_out
+
+    def iDHT(self, u_in, u_out):
+
+        u_out = np.dot(self.invTM.astype(self.dtype), u_in, out=u_out)
+        return u_out
