@@ -10,6 +10,14 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from numba import njit, prange
 
+try:
+    from numba import njit, prange
+    njit = njit(parallel=True, fastmath=True)
+except Exception:
+    prange = range
+    def njit(func):
+        print("This function is greatly accelerated if Numba is installed")
+        return func
 
 def laser_from_fu(fu, r, kz, normalize=False):
     """
@@ -59,7 +67,7 @@ def mirror_axiparabola2(f0, d0, r, kz):
 
     return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
-@njit(parallel=True, fastmath=True)
+@njit
 def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
     """
     Resonstruct temporal-radial field distribution
