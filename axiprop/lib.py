@@ -1,19 +1,66 @@
+# Copyright 2020
+# Authors: Igor Andriyash
+# License: GNU GPL v3
+"""
+Axiprop main file
+
+This file contains main classes for for Axiprop tool
+"""
 import numpy as np
 from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
 from scipy.linalg import pinv2
 
+
 class PropagatorCommon:
+    """
+    Base class for propagators. Contains methods to:
+    - setup spectral `kz` grid;
+    - perform a single-step calculation;
+    - perform a multi-step calculation;
+
+    This class should to be used to derive the actual Propagators
+    by adding proper methods to setup radial and `kr` grids, and
+    DHT /iDHT transforms.
+    """
 
     def init_kz(self, Lkz, Nkz, k0):
+        """
+        Setup `kz` spectral grid.
 
+        Parameters
+        ----------
+        Lkz: float (1/m)
+            Total spectral width in units of wavenumbers.
+
+        Nkz: int
+            Number of spectral modes (wavenumbers) to resolve the temporal
+            profile of the wave.
+
+        k0: float (1/m)
+            Central wavenumber of the spectral domain.
+        """
         self.Nkz = Nkz
         self.kz = k0 + Lkz / 2 * np.linspace(-1., 1., Nkz)
-
         self.dtype = np.complex
 
     def step(self, u, dz):
+        """
+        Propagate wave `u` over the distance `dz`.
 
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        dz: float (m)
+            Distance over which wave should be propagated.
+
+        Returns
+        -------
+        u: 2darray of complex or double
+            Overwritten array with the propagated field.
+        """
         assert u.shape[0] == self.Nkz
         assert u.shape[1] == self.Nr
         assert self.dtype == u.dtype
@@ -30,7 +77,22 @@ class PropagatorCommon:
         return u
 
     def steps(self, u, dz, verbose=True):
+        """
+        Propagate wave `u` over the multiple steps.
 
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        dz: array of floats (m)
+            Steps over which wave should be propagated.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
         Nsteps = len(dz)
         if Nsteps==0:
             return None
@@ -61,14 +123,71 @@ class PropagatorCommon:
         return u_steps
 
 class PropagatorSymmetric(PropagatorCommon):
+    """
+    Class for the propagator described in [M. Guizar-Sicairos,
+    J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
+
+    Contains methods to:
+    - setup radial `r`, spectral `kr` grids and DHT transformation matrix;
+    - perform a forward DHT transform;
+    - perform a inverse DHT transform;
+
+    This propagator uses same DHT matrix for forward and inverse transforms.
+    Inverse transform can be truncated to a smaller radial size (same grid).
+    """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
                  Nr_new=None, dtype=np.complex):
+        """
+        Construct the propagator.
 
+        Parameters
+        ----------
+        Rmax: float (m)
+            Radial size of the calculation domain.
+
+        Lkz: float (1/m)
+            Total spectral width in units of wavenumbers.
+
+        Nr: int
+            Number of nodes of the radial grid.
+
+        Nkz: int
+            Number of spectral modes (wavenumbers) to resolve the temporal
+            profile of the wave.
+
+        k0: float (1/m)
+            Central wavenumber of the spectral domain.
+
+        Nr_new: int (optional)
+            New number of nodes of the trancated radial grid. If not defined
+            `Nr` will be used.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+        """
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_and_DHT(Rmax, Nr, Nr_new, dtype)
 
     def init_rkr_and_DHT(self, Rmax, Nr, Nr_new, dtype):
+        """
+        Setup radial `r` and spectral `kr` grids and DHT transformation matrix.
+
+        Parameters
+        ----------
+        Rmax: float (m)
+            Radial size of the calculation domain.
+
+        Nr: int
+            Number of nodes of the radial grid.
+
+        Nr_new: int
+            New number of nodes of the trancated radial grid. If is `None`,
+            `Nr` will be used.
+
+        dtype: type
+            Data type to be used.
+        """
         self.Rmax = Rmax
         self.Nr = Nr
         self.dtype = dtype
@@ -94,26 +213,112 @@ class PropagatorSymmetric(PropagatorCommon):
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
     def DHT(self, u_in, u_out):
+        """
+        Forward DHT transform.
 
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-radial field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-spectral field.
+        """
         u_out = np.dot(self.TM.astype(self.dtype), u_in/self._j, out=u_out)
         return u_out
 
     def iDHT(self, u_in, u_out):
+        """
+        Inverse DHT transform.
 
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-spectral field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-radial field.
+        """
         u_out = np.dot(self.TM[:self.Nr_new].astype(self.dtype),
                        u_in, out=u_out)
         u_out *= self._j[:self.Nr_new]
         return u_out
 
 class PropagatorResampling(PropagatorCommon):
+    """
+    Class for the propagator with possible different sampling for
+    input and output radial grids.
+
+    Contains methods to:
+    - setup radial `r`, spectral `kr` grids, DHT/iDHT transformation matrices;
+    - perform a forward DHT transform;
+    - perform a inverse DHT transform;
+
+    This propagator creates inverse iDHT matrix using numeric inversion
+    of DHT. This method samples output field on an arbitrary uniform
+    radial grid.
+    """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
                  Rmax_new=None, Nr_new=None, dtype=np.complex):
+        """
+        Construct the propagator.
 
+        Parameters
+        ----------
+        Rmax: float (m)
+            Radial size of the calculation domain.
+
+        Lkz: float (1/m)
+            Total spectral width in units of wavenumbers.
+
+        Nr: int
+            Number of nodes of the radial grid.
+
+        Nkz: int
+            Number of spectral modes (wavenumbers) to resolve the temporal
+            profile of the wave.
+
+        k0: float (1/m)
+            Central wavenumber of the spectral domain.
+
+        Rmax_new: float (m) (optional)
+            New radial size for the output calculation domain. If not defined
+            `Rmax` will be used.
+
+        Nr_new: int (optional)
+            New number of nodes of the radial grid. If not defined `Nr`
+            will be used.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+        """
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_and_DHT(Rmax, Nr, Rmax_new, Nr_new, dtype)
 
     def init_rkr_and_DHT(self, Rmax, Nr, Rmax_new, Nr_new, dtype):
+        """
+        Setup radial `r` and spectral `kr` grids and DHT transformation matrix.
+
+        Parameters
+        ----------
+        Rmax: float (m)
+            Radial size of the calculation domain.
+
+        Nr: int
+            Number of nodes of the radial grid.
+
+        Rmax_new: float (m) (optional)
+            New radial size for the output calculation domain. If not defined
+            `Rmax` will be used.
+
+        Nr_new: int
+            New number of nodes of the radial grid. If is `None`, `Nr` will
+            be used.
+
+        dtype: type
+            Data type to be used.
+        """
         self.Rmax = Rmax
         self.Nr = Nr
         self.dtype = dtype
@@ -143,11 +348,31 @@ class PropagatorResampling(PropagatorCommon):
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
     def DHT(self, u_in, u_out):
+        """
+        Forward DHT transform.
 
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-radial field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-spectral field.
+        """
         u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
         return u_out
 
     def iDHT(self, u_in, u_out):
+        """
+        Inverse DHT transform.
 
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-spectral field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-radial field.
+        """
         u_out = np.dot(self.invTM.astype(self.dtype), u_in, out=u_out)
         return u_out
