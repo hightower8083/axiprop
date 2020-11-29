@@ -1,5 +1,5 @@
 # Axiprop
-Simple tool to compute optical propagation tool based on discrete 
+Simple tool to compute optical propagation, based on the discrete 
 Hankel transform.
 
 This library contains methods to model propagation of axisymmetric 3D optical
