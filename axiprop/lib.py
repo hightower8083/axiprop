@@ -4,7 +4,10 @@
 """
 Axiprop main file
 
-This file contains main classes for for Axiprop tool
+This file contains main classes for for Axiprop tool:
+- PropagatorCommon
+- PropagatorSymmetric
+- PropagatorResampling
 """
 import numpy as np
 from scipy.constants import c
