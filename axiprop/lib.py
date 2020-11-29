@@ -104,7 +104,7 @@ class PropagatorCommon:
         assert u.shape[1] == self.Nr
         assert self.dtype == u.dtype
 
-        u_steps = np.empty((self.Nkz, self.Nr_new, Nsteps), dtype=self.dtype)
+        u_steps = np.empty((Nsteps, self.Nkz, self.Nr_new), dtype=self.dtype)
 
         if verbose:
             print('Propagating:')
@@ -116,7 +116,7 @@ class PropagatorCommon:
             for i_step in range(Nsteps):
                 self.u_ht *= np.exp( dz[i_step] * ik_loc )
                 self.u_iht = self.iDHT(self.u_ht, self.u_iht)
-                u_steps[ikz, :, i_step] = self.u_iht
+                u_steps[i_step, ikz, :] = self.u_iht
 
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
