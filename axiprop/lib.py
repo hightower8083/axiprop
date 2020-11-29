@@ -4,7 +4,7 @@
 """
 Axiprop main file
 
-This file contains main classes for for Axiprop tool:
+This file contains main classes of axiprop:
 - PropagatorCommon
 - PropagatorSymmetric
 - PropagatorResampling
