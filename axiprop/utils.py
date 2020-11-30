@@ -19,7 +19,7 @@ except Exception:
         print("This function is greatly accelerated if Numba is installed")
         return func
 
-def laser_from_fu(fu, r, kz, normalize=False):
+def laser_from_fu(fu, kz, r, normalize=False):
     """
     Generate array with spectra-radial field
     distribution with the pre-defined function
@@ -31,7 +31,7 @@ def laser_from_fu(fu, r, kz, normalize=False):
 
     return a0
 
-def mirror_parabolic(f0, r, kz):
+def mirror_parabolic(f0, kz, r):
     """
     Generate array with spectra-radial phase
     representing the on-axis Parabolic Mirror
@@ -39,7 +39,7 @@ def mirror_parabolic(f0, r, kz):
     s_ax = r**2/4/f0
     return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
-def mirror_axiparabola(f0, d0, r, kz):
+def mirror_axiparabola(f0, d0, kz, r):
     """
     Generate array with spectra-radial phase representing
     the on-axis Axiparabola with analytic expression (see
@@ -50,7 +50,7 @@ def mirror_axiparabola(f0, d0, r, kz):
 
     return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
-def mirror_axiparabola2(f0, d0, r, kz):
+def mirror_axiparabola2(f0, d0, kz, r):
     """
     Generate array with spectra-radial phase representing
     the on-axis Axiparabola solving sag-equation numerically

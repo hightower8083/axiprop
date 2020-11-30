@@ -47,6 +47,32 @@ class PropagatorCommon:
         self.kz = k0 + Lkz / 2 * np.linspace(-1., 1., Nkz)
         self.dtype = np.complex
 
+    def init_rkr_jroot_both(self, Rmax, Nr, dtype):
+        """
+        Setup radial `r` and spectral `kr` grids, and fix data type.
+
+        Parameters
+        ----------
+        Rmax: float (m)
+            Radial size of the calculation domain.
+
+        Nr: int
+            Number of nodes of the radial grid.
+
+        dtype: type
+            Data type to be used.
+        """
+        self.Rmax = Rmax
+        self.Nr = Nr
+        self.dtype = dtype
+
+        alpha = jn_zeros(0, Nr+1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
+
+        self.r = Rmax * alpha / alpha_np1
+        self.kr = alpha/Rmax
+
     def step(self, u, dz):
         """
         Propagate wave `u` over the distance `dz`.
@@ -131,7 +157,7 @@ class PropagatorSymmetric(PropagatorCommon):
     J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
 
     Contains methods to:
-    - setup radial `r`, spectral `kr` grids and DHT transformation matrix;
+    - setup DHT transformation;
     - perform a forward DHT transform;
     - perform a inverse DHT transform;
 
@@ -170,47 +196,36 @@ class PropagatorSymmetric(PropagatorCommon):
             Data type to be used. Default is np.complex128.
         """
         self.init_kz(Lkz, Nkz, k0)
-        self.init_rkr_and_DHT(Rmax, Nr, Nr_new, dtype)
+        self.init_rkr_jroot_both(Rmax, Nr, dtype)
+        self.init_DHT(Nr_new)
 
-    def init_rkr_and_DHT(self, Rmax, Nr, Nr_new, dtype):
+    def init_DHT(self, Nr_new):
         """
-        Setup radial `r` and spectral `kr` grids and DHT transformation matrix.
+        Setup DHT transformation matrix and data buffers.
 
         Parameters
         ----------
-        Rmax: float (m)
-            Radial size of the calculation domain.
-
-        Nr: int
-            Number of nodes of the radial grid.
-
         Nr_new: int
             New number of nodes of the trancated radial grid. If is `None`,
             `Nr` will be used.
-
-        dtype: type
-            Data type to be used.
         """
-        self.Rmax = Rmax
-        self.Nr = Nr
-        self.dtype = dtype
+        Rmax = self.Rmax
+        Nr = self.Nr
+        dtype = self.dtype
+
+        self.Nr_new = Nr_new
+        if self.Nr_new is None:
+            self.Nr_new = Nr
+        self.r_new = self.r[:self.Nr_new]
 
         alpha = jn_zeros(0, Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self.r = Rmax * alpha / alpha_np1
-        self.kr = alpha/Rmax
-
         self._j = (np.abs(j1(alpha)) / Rmax).astype(dtype)
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
 
-        self.Nr_new = Nr_new
-        if self.Nr_new is None:
-            self.Nr_new = Nr
-
-        self.r_new = self.r[:self.Nr_new]
         self.u_loc = np.zeros(self.Nr, dtype=dtype)
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
@@ -227,7 +242,8 @@ class PropagatorSymmetric(PropagatorCommon):
         u_out: 2darray of complex (is also Returned)
             Array with the spectral-spectral field.
         """
-        u_out = np.dot(self.TM.astype(self.dtype), u_in/self._j, out=u_out)
+        u_in = u_in/self._j
+        u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
         return u_out
 
     def iDHT(self, u_in, u_out):
@@ -253,7 +269,7 @@ class PropagatorResampling(PropagatorCommon):
     input and output radial grids.
 
     Contains methods to:
-    - setup radial `r`, spectral `kr` grids, DHT/iDHT transformation matrices;
+    - setup DHT/iDHT transformations;
     - perform a forward DHT transform;
     - perform a inverse DHT transform;
 
@@ -297,20 +313,15 @@ class PropagatorResampling(PropagatorCommon):
             Data type to be used. Default is np.complex128.
         """
         self.init_kz(Lkz, Nkz, k0)
-        self.init_rkr_and_DHT(Rmax, Nr, Rmax_new, Nr_new, dtype)
+        self.init_rkr_jroot_both(Rmax, Nr, dtype)
+        self.init_DHT(Rmax_new, Nr_new)
 
-    def init_rkr_and_DHT(self, Rmax, Nr, Rmax_new, Nr_new, dtype):
+    def init_DHT(self, Rmax_new, Nr_new):
         """
-        Setup radial `r` and spectral `kr` grids and DHT transformation matrix.
+        Setup DHT transformation and data buffers.
 
         Parameters
         ----------
-        Rmax: float (m)
-            Radial size of the calculation domain.
-
-        Nr: int
-            Number of nodes of the radial grid.
-
         Rmax_new: float (m) (optional)
             New radial size for the output calculation domain. If not defined
             `Rmax` will be used.
@@ -318,20 +329,10 @@ class PropagatorResampling(PropagatorCommon):
         Nr_new: int
             New number of nodes of the radial grid. If is `None`, `Nr` will
             be used.
-
-        dtype: type
-            Data type to be used.
         """
-        self.Rmax = Rmax
-        self.Nr = Nr
-        self.dtype = dtype
-
-        alpha = jn_zeros(0, Nr+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-
-        self.r = Rmax * alpha / alpha_np1
-        self.kr = alpha/Rmax
+        Rmax = self.Rmax
+        Nr = self.Nr
+        dtype = self.dtype
 
         self.Rmax_new = Rmax_new
         if self.Rmax_new is None:
@@ -341,6 +342,10 @@ class PropagatorResampling(PropagatorCommon):
         if self.Nr_new is None:
             self.Nr_new = Nr
         self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
+
+        alpha = jn_zeros(0, Nr+1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
 
         invTM = j0(self.r[:,None] * self.kr[None,:])
         self.TM = pinv2(invTM, check_finite=False)
