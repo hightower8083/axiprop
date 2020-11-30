@@ -39,34 +39,6 @@ def mirror_parabolic(f0, kz, r):
     s_ax = r**2/4/f0
     return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
-def mirror_axiparabola(f0, d0, kz, r):
-    """
-    Generate array with spectra-radial phase representing
-    the on-axis Axiparabola with analytic expression (see
-    Eq. (4) in [Smartsev et al Opt. Lett. 44, 3414 (2019)])
-    """
-    s_ax = r**2/4/f0 - d0/(8*f0**2*Rmax**2)*r**4 \
-         + d0*(Rmax**2+8*f0*d0)/(96*f0**4*Rmax**4)*r**6
-
-    return np.exp(-2j * s_ax[None,:] * kz[:,None])
-
-def mirror_axiparabola2(f0, d0, kz, r):
-    """
-    Generate array with spectra-radial phase representing
-    the on-axis Axiparabola solving sag-equation numerically
-    (see Eq. (2) in [Smartsev et al Opt. Lett. 44, 3414 (2019)])
-    """
-    sag_equation = lambda r, s : (s - (f0 + d0 * np.sqrt(r/Rmax)) +
-            np.sqrt(r**2 + ((f0 + d0 * np.sqrt(r/Rmax) - s)**2))/r)
-
-    s_ax = solve_ivp( sag_equation,
-                      (r[0], r[-1]),
-                      [r[0]/(4*f0),],
-                      t_eval=r
-                    ).y.flatten()
-
-    return np.exp(-2j * s_ax[None,:] * kz[:,None])
-
 @njit
 def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
     """
