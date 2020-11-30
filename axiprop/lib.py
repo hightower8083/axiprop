@@ -19,6 +19,7 @@ class PropagatorCommon:
     """
     Base class for propagators. Contains methods to:
     - setup spectral `kz` grid;
+    - setup radial `r` and spectral `kr` grids;
     - perform a single-step calculation;
     - perform a multi-step calculation;
 
@@ -43,8 +44,12 @@ class PropagatorCommon:
         k0: float (1/m)
             Central wavenumber of the spectral domain.
         """
-        self.Nkz = Nkz
-        self.kz = k0 + Lkz / 2 * np.linspace(-1., 1., Nkz)
+        Nkz_2 = int(np.ceil(Nkz/2))
+        half_ax = np.linspace(0, 1., Nkz_2)
+        full_ax = np.r_[-half_ax[1:][::-1], half_ax]
+
+        self.kz = k0 + Lkz / 2 * full_ax
+        self.Nkz = full_ax.size
         self.dtype = np.complex
 
     def init_rkr_jroot_both(self, Rmax, Nr, dtype):

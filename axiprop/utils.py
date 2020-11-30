@@ -24,7 +24,7 @@ def laser_from_fu(fu, kz, r, normalize=False):
     Generate array with spectra-radial field
     distribution with the pre-defined function
     """
-    a0 = fu( r[None,:], kz[:,None] )
+    a0 = fu( kz[:,None], r[None,:] )
 
     if normalize:
         a0 /= (np.abs(a0)**2).sum(0).max()**0.5

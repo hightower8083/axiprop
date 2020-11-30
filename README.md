@@ -22,11 +22,11 @@ k0 = 2 * np.pi / 0.8e-6            # 800 nm wavelength
 tau = 35e-15/ (2*np.log(2))**0.5   # 35 fs FWHM duration
 R_las = 10e-3                      # 10 mm radius
 
-def fu_laser(r, kz):
+def fu_laser(kz, r):
     """
     Gaussian spot with the Gaussian temporal profile
     """
-    profile_r = np.exp( -(r/R_las)**2 ) * (r<3.5*R_las)
+    profile_r = np.exp( -(r/R_las)**2 )
     profile_kz = np.exp( -( (kz-k0) * c * tau / 2 )**2 )
     return profile_r * profile_kz
 ```
@@ -43,11 +43,12 @@ prop = PropagatorSymmetric(Rmax, L_kz, Nr, Nkz, k0,  Nr_end)
 ```
 and setup the laser reflected from the focusing mirror
 ```python
-A0 = laser_from_fu( fu_laser, prop.r, prop.kz, normalize=True )
-A0 = A0 * mirror_parabolic( f0, prop.r, prop.kz )
+A0 = laser_from_fu( fu_laser, prop.kz, prop.r, normalize=True )
+A0 = A0 * mirror_parabolic( f0, prop.kz, prop.r )
 ```
 
-Use `AXIPROP` to compute the field after propagation of `dz` distance (e.g. `dz=f0` for field at focus):
+Use `AXIPROP` to compute the field after propagation of `dz` distance 
+(e.g. `dz=f0` for field at focus):
 ```python
 A0 = prop.step(A0, f0)
 ```
@@ -60,9 +61,12 @@ A_multi = prop.steps(A0, zsteps)
 ```
 
 Plot the results using your favorite tools 
+
 ![example_image](https://github.com/hightower8083/axiprop/blob/main/examples/example_figure.jpg)
 
-For more info checkout the [example notebook](https://github.com/hightower8083/axiprop/blob/main/examples/example.ipynb), and the methods inline documentation.
+For more info checkout the 
+[example notebook](https://github.com/hightower8083/axiprop/blob/main/examples/example.ipynb)
+, and inline documentation of the methods.
 
 ### Installation
 
