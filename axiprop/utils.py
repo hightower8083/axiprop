@@ -7,17 +7,21 @@ Axiprop utils file
 This file contains utility methods for Axiprop tool
 """
 import numpy as np
-from scipy.integrate import solve_ivp
 from numba import njit, prange
+from scipy.constants import c
 
+# try import numba and make dummy methods if it is not
 try:
     from numba import njit, prange
     njit = njit(parallel=True, fastmath=True)
 except Exception:
     prange = range
     def njit(func):
-        print("This function is greatly accelerated if Numba is installed")
-        return func
+        def func_wrp(*args, **kw_args):
+            print(f"Install Numba to get `{func.__name__}` " + \
+                   "function greatly accelerated")
+            return func(*args, **kw_args)
+        return func_wrp
 
 def laser_from_fu(fu, kz, r, normalize=False):
     """
@@ -40,18 +44,16 @@ def mirror_parabolic(f0, kz, r):
     return np.exp(-2j * s_ax[None,:] * kz[:,None])
 
 @njit
-def get_temporal_onaxis(time_ax, freq, A_freqR, A_temp):
+def get_temporal_1d(u, u_t, t, kz, Nr_loc):
     """
     Resonstruct temporal-radial field distribution
     """
-    A_temp[:] = 0.0
-    Nw_loc = A_freqR.shape[0]
-    Nr_loc = A_freqR.shape[1]
-    Nt_loc = time_ax.size
+    Nkz, Nr = u.shape
+    Nt = t.size
 
-    for it in prange(Nt_loc):
-        propag = np.exp(-1j*freq*time_ax[it])
+    for it in prange(Nt):
+        FFT_factor = np.exp(-1j * kz * c * t[it])
         for ir in range(Nr_loc):
-            A_temp[it] += np.real(A_freqR[:,ir] * propag).sum()
+            u_t[it] += np.real(u[:,ir] * FFT_factor).sum()
 
-    return A_temp
+    return u_t
