@@ -8,6 +8,8 @@ axiprop/__pycache__
 axiprop/*.pyc
 axiprop/.ipynb_checkpoints/
 
+axiprop/utils_priv.py
+
 scripts/*.DS_Store
 scripts/__pycache__
 scripts/*.pyc
