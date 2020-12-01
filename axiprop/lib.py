@@ -14,17 +14,23 @@ from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
 from scipy.linalg import pinv2
 
+try:
+    import pyfftw
+    have_pyfftw = True
+except Exception:
+    have_pyfftw = False
+
 class PropagatorCommon:
     """
     Base class for propagators. Contains methods to:
     - setup spectral `kz` grid;
     - setup radial `r` and spectral `kr` grids;
+    - setup transverse `x`-`y`, and spectral `kx`-`ky` grids;
     - perform a single-step calculation;
     - perform a multi-step calculation;
 
     This class should to be used to derive the actual Propagators
-    by adding proper methods to setup radial and `kr` grids, and
-    DHT /iDHT transforms.
+    by adding proper methods for the Transverse Spectral Transforms (TST).
     """
 
     def init_kz(self, Lkz, Nkz, k0):
@@ -141,9 +147,9 @@ class PropagatorCommon:
 
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
-            self.u_ht = self.DHT(self.u_loc, self.u_ht)
+            self.u_ht = self.TST(self.u_loc, self.u_ht)
             self.u_ht *= np.exp(1j * dz * np.sqrt(self.kz[ikz]**2 - self.kr**2))
-            self.u_iht = self.iDHT(self.u_ht, self.u_iht)
+            self.u_iht = self.iTST(self.u_ht, self.u_iht)
             u[ikz, :self.Nr_new] = self.u_iht
 
         u = u[:, :self.Nr_new]
@@ -182,11 +188,11 @@ class PropagatorCommon:
 
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
-            self.u_ht = self.DHT(self.u_loc, self.u_ht)
+            self.u_ht = self.TST(self.u_loc, self.u_ht)
             ik_loc = 1j * np.sqrt(self.kz[ikz]**2 - self.kr**2)
             for i_step in range(Nsteps):
                 self.u_ht *= np.exp( dz[i_step] * ik_loc )
-                self.u_iht = self.iDHT(self.u_ht, self.u_iht)
+                self.u_iht = self.iTST(self.u_ht, self.u_iht)
                 u_steps[i_step, ikz, :] = self.u_iht
 
                 if verbose:
@@ -198,16 +204,16 @@ class PropagatorCommon:
 
 class PropagatorSymmetric(PropagatorCommon):
     """
-    Class for the propagator described in [M. Guizar-Sicairos,
-    J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
+    Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
+    described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
 
     Contains methods to:
-    - setup DHT transformation;
-    - perform a forward DHT transform;
-    - perform a inverse DHT transform;
+    - setup QDHT for TST;
+    - perform a forward QDHT;
+    - perform a inverse QDHT;
 
-    This propagator uses same DHT matrix for forward and inverse transforms.
-    Inverse transform can be truncated to a smaller radial size (same grid).
+    This propagator uses same matrix for the forward and inverse transforms.
+    The inverse transform can be truncated to a smaller radial size (same grid).
     """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
@@ -242,11 +248,11 @@ class PropagatorSymmetric(PropagatorCommon):
         """
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_jroot_both(Rmax, Nr, dtype)
-        self.init_DHT(Nr_new)
+        self.init_TST(Nr_new)
 
-    def init_DHT(self, Nr_new):
+    def init_TST(self, Nr_new):
         """
-        Setup DHT transformation matrix and data buffers.
+        Setup QDHT transformation matrix and data buffers.
 
         Parameters
         ----------
@@ -275,9 +281,9 @@ class PropagatorSymmetric(PropagatorCommon):
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
-    def DHT(self, u_in, u_out):
+    def TST(self, u_in, u_out):
         """
-        Forward DHT transform.
+        Forward QDHT transform.
 
         Parameters
         ----------
@@ -291,9 +297,9 @@ class PropagatorSymmetric(PropagatorCommon):
         u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
         return u_out
 
-    def iDHT(self, u_in, u_out):
+    def iTST(self, u_in, u_out):
         """
-        Inverse DHT transform.
+        Inverse QDHT transform.
 
         Parameters
         ----------
@@ -310,17 +316,16 @@ class PropagatorSymmetric(PropagatorCommon):
 
 class PropagatorResampling(PropagatorCommon):
     """
-    Class for the propagator with possible different sampling for
-    input and output radial grids.
+    Class for the propagator with the non-symmetric Discrete Hankel transform
+    (DHT) and possible different sampling for the input and output radial grids.
 
     Contains methods to:
-    - setup DHT/iDHT transformations;
-    - perform a forward DHT transform;
-    - perform a inverse DHT transform;
+    - setup DHT/iDHT transforms for TST;
+    - perform a forward DHT;
+    - perform a inverse iDHT;
 
-    This propagator creates inverse iDHT matrix using numeric inversion
-    of DHT. This method samples output field on an arbitrary uniform
-    radial grid.
+    This propagator creates DHT matrix using numeric inversion of the inverse iDHT.
+    This method samples output field on an arbitrary uniform radial grid.
     """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
@@ -359,11 +364,11 @@ class PropagatorResampling(PropagatorCommon):
         """
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_jroot_both(Rmax, Nr, dtype)
-        self.init_DHT(Rmax_new, Nr_new)
+        self.init_TST(Rmax_new, Nr_new)
 
-    def init_DHT(self, Rmax_new, Nr_new):
+    def init_TST(self, Rmax_new, Nr_new):
         """
-        Setup DHT transformation and data buffers.
+        Setup DHT transform and data buffers.
 
         Parameters
         ----------
@@ -400,7 +405,7 @@ class PropagatorResampling(PropagatorCommon):
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
-    def DHT(self, u_in, u_out):
+    def TST(self, u_in, u_out):
         """
         Forward DHT transform.
 
@@ -415,7 +420,7 @@ class PropagatorResampling(PropagatorCommon):
         u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
         return u_out
 
-    def iDHT(self, u_in, u_out):
+    def iTST(self, u_in, u_out):
         """
         Inverse DHT transform.
 
@@ -432,17 +437,15 @@ class PropagatorResampling(PropagatorCommon):
 
 class PropagatorFFT2(PropagatorCommon):
     """
-    Class for the propagator with possible different sampling for
-    input and output radial grids.
+    Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
+    for TST.
 
     Contains methods to:
-    - setup DHT/iDHT transformations;
-    - perform a forward DHT transform;
-    - perform a inverse DHT transform;
+    - setup TST data buffers;
+    - perform a forward FFT;
+    - perform a inverse FFT;
 
-    This propagator creates inverse iDHT matrix using numeric inversion
-    of DHT. This method samples output field on an arbitrary uniform
-    radial grid.
+    This class uses serial Numpy `fft` library.
     """
 
     def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
@@ -479,11 +482,11 @@ class PropagatorFFT2(PropagatorCommon):
         """
         self.init_kz(Lkz, Nkz, k0)
         self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
-        self.init_DHT()
+        self.init_TST()
 
-    def init_DHT(self):
+    def init_TST(self):
         """
-        Setup data buffers for DHT transformation.
+        Setup data buffers for TST.
         """
         Nr = self.Nr
         Nx = self.Nx
@@ -496,9 +499,9 @@ class PropagatorFFT2(PropagatorCommon):
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr, dtype=dtype)
 
-    def DHT(self, u_in, u_out):
+    def TST(self, u_in, u_out):
         """
-        Forward DHT transform.
+        Forward FFT transform.
 
         Parameters
         ----------
@@ -508,15 +511,13 @@ class PropagatorFFT2(PropagatorCommon):
         u_out: 2darray of complex (is also Returned)
             Array with the spectral-spectral field.
         """
-
         u_in = u_in.reshape(self.Nx, self.Ny)
-
-        u_out[:] = np.fft.fft2(u_in).flatten()
+        u_out[:] = np.fft.fft2(u_in, norm='ortho').flatten()
         return u_out
 
-    def iDHT(self, u_in, u_out):
+    def iTST(self, u_in, u_out):
         """
-        Inverse DHT transform.
+        Inverse FFT transform.
 
         Parameters
         ----------
@@ -527,6 +528,125 @@ class PropagatorFFT2(PropagatorCommon):
             Array with the spectral-radial field.
         """
         u_in = u_in.reshape(self.Nx, self.Ny)
-        u_out[:] = np.fft.ifft2(u_in).flatten()
+        u_out[:] = np.fft.ifft2(u_in, norm='ortho').flatten()
+        return u_out
 
+class PropagatorFFTW(PropagatorCommon):
+    """
+    Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
+    for TST. This class uses Numpy `fft` library.
+
+    Contains methods to:
+    - setup FFTW object and TST data buffers;
+    - perform a forward FFT;
+    - perform a inverse FFT;
+
+    This class uses FFTW library via `pyfftw` wrapper, and can be used with
+    multiple processors. This method is typically 2 times faster than
+    PropagatorFFT2.
+    """
+
+    def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0, Rmax_new=None,
+                 Nr_new=None, dtype=np.complex, threads=4):
+        """
+        Construct the propagator.
+
+        Parameters
+        ----------
+        Lx: float (m)
+            Full size of the calculation domain along x-axis.
+
+        Ly: float (m)
+            Full size of the calculation domain along y-axis.
+
+        Lkz: float (1/m)
+            Total spectral width in units of wavenumbers.
+
+        Nx: int
+            Number of nodes of the x-grid.
+
+        Ny: int
+            Number of nodes of the y-grid.
+
+        Nkz: int
+            Number of spectral modes (wavenumbers) to resolve the temporal
+            profile of the wave.
+
+        k0: float (1/m)
+            Central wavenumber of the spectral domain.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+
+        threads: int
+            Number of threads to use for computations. Default is 4.
+        """
+        if not have_pyfftw:
+            print("This method requires `pyfftw`. " + \
+                "Install `pyfftw`, or use PropagatorFFT2 (slower numpy fft)")
+            return
+
+        self.init_kz(Lkz, Nkz, k0)
+        self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
+        self.init_TST(threads)
+
+    def init_TST(self, threads):
+        """
+        Setup data buffers for DHT transformation.
+
+        Parameters
+        ----------
+        threads: int
+            Number of threads to use for computations.
+        """
+        Nr = self.Nr
+        Nx = self.Nx
+        Ny = self.Ny
+        self.Nr_new = Nr
+
+        dtype = self.dtype
+
+        self.u_loc = np.zeros(self.Nr, dtype=dtype)
+        self.u_ht = np.zeros(self.Nr, dtype=dtype)
+        self.u_iht = np.zeros(self.Nr, dtype=dtype)
+
+        self.in_buff = pyfftw.empty_aligned( (Nx, Ny), dtype=np.complex128 )
+        self.out_buff = pyfftw.empty_aligned( (Nx, Ny), dtype=np.complex128 )
+        self.fft = pyfftw.FFTW( self.in_buff, self.out_buff, axes=(-1,0),
+            direction='FFTW_FORWARD', threads=threads)
+        self.ifft = pyfftw.FFTW( self.in_buff, self.out_buff, axes=(-1,0),
+            direction='FFTW_BACKWARD', threads=threads, normalise_idft=True)
+
+    def TST(self, u_in, u_out):
+        """
+        Forward FFT transform.
+
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-radial field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-spectral field.
+        """
+        self.in_buff[:] = u_in.reshape(self.Nx, self.Ny)
+        self.fft()
+        u_out[:] = self.out_buff.flatten()
+        return u_out
+
+    def iTST(self, u_in, u_out):
+        """
+        Inverse FFT transform.
+
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-spectral field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-radial field.
+        """
+        self.in_buff[:] = u_in.reshape(self.Nx, self.Ny)
+        self.ifft()
+        u_out[:] = self.out_buff.flatten()
         return u_out

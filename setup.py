@@ -20,6 +20,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='axiprop',
+    python_requires='>=3.6',
     version=axiprop.__version__,
     description='optical propagation tool for axiparabola',
     long_description=long_description,
@@ -41,8 +42,7 @@ setup(
         'Intended Audience :: Science/Research',
         'Operating System :: OS Independent',
         'Topic :: Scientific/Engineering :: Physics',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5'],
+        'Programming Language :: Python :: >=3.6',
+        ],
     zip_safe=False,
     )

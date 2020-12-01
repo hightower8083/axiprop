@@ -28,7 +28,12 @@ def laser_from_fu(fu, kz, r, normalize=False):
     Generate array with spectra-radial field
     distribution with the pre-defined function
     """
-    a0 = fu( kz[:,None], r[None,:] )
+
+    fu = njit(fu)
+
+    shape2d = (kz.size, r.size)
+
+    a0 = fu( kz[:,None]*np.ones(shape2d), r[None,:]*np.ones(shape2d) )
 
     if normalize:
         a0 /= (np.abs(a0)**2).sum(0).max()**0.5

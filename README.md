@@ -1,18 +1,20 @@
 # Axiprop
 Simple tool to compute optical propagation, based on the discrete 
-Hankel transform
+Hankel and Fourier transforms
 
 ### Contents
 
-This library contains methods and convenience tools to model propagation of 3D axisymmetric optical
+This library contains methods and convenience tools to model propagation of the 3D optical
 field. 
 
 Currently methods include:
-- `PropagatorSymmetric`: scheme with symmetric DHT proposed in  [[M. Guizar-Sicairos, 
-J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)](https://doi.org/10.1364/JOSAA.21.000053)]
-- `PropagatorResampling`: a more generic scheme which allows using an arbitrary
+- `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
+[[M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)](https://doi.org/10.1364/JOSAA.21.000053)]
+- `PropagatorResampling`: cylindical axisymmetric propagator with a more generic DHT which allows for arbitrary
 sampling of radial axis
-
+- `PropagatorFFT2`: fully 3D FFT-based propagator implemented with `numpy.fft` library
+- `PropagatorFFTW`: same fully 3D FFT-based propagator but using [FFTW](http://www.fftw.org/) library 
+via [pyfftw](https://github.com/pyFFTW/pyFFTW) wrapper.
 
 ### Usage
 
