@@ -14,7 +14,6 @@ from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
 from scipy.linalg import pinv2
 
-
 class PropagatorCommon:
     """
     Base class for propagators. Contains methods to:
@@ -77,6 +76,47 @@ class PropagatorCommon:
 
         self.r = Rmax * alpha / alpha_np1
         self.kr = alpha/Rmax
+
+    def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
+        """
+        Setup the transverse `x` and `y` and corresponding spectral
+        `kx` and `ky` grids, and fix data type.
+
+        Parameters
+        ----------
+        Lx: float (m)
+            Full size of the calculation domain along x-axis.
+
+        Ly: float (m)
+            Full size of the calculation domain along y-axis.
+
+        Nx: int
+            Number of nodes of the x-grid.
+
+        Ny: int
+            Number of nodes of the y-grid.
+
+        dtype: type
+            Data type to be used.
+        """
+        self.dtype = dtype
+
+        self.Lx = Lx
+        self.Ly = Ly
+        self.Nx = Nx
+        self.Ny = Ny
+
+        self.x = np.linspace(-Lx/2, Lx/2, Nx)
+        self.y = np.linspace(-Ly/2, Ly/2, Ny)
+        dx = self.x[1] - self.x[0]
+        dy = self.y[1] - self.y[0]
+
+        self.kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
+        self.ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
+
+        self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 ).flatten()
+        self.kr = np.sqrt(self.kx[:,None]**2 + self.ky[None,:]**2).flatten()
+        self.Nr = self.r.size
 
     def step(self, u, dz):
         """
@@ -388,4 +428,105 @@ class PropagatorResampling(PropagatorCommon):
             Array with the spectral-radial field.
         """
         u_out = np.dot(self.invTM.astype(self.dtype), u_in, out=u_out)
+        return u_out
+
+class PropagatorFFT2(PropagatorCommon):
+    """
+    Class for the propagator with possible different sampling for
+    input and output radial grids.
+
+    Contains methods to:
+    - setup DHT/iDHT transformations;
+    - perform a forward DHT transform;
+    - perform a inverse DHT transform;
+
+    This propagator creates inverse iDHT matrix using numeric inversion
+    of DHT. This method samples output field on an arbitrary uniform
+    radial grid.
+    """
+
+    def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
+                 Rmax_new=None, Nr_new=None, dtype=np.complex):
+        """
+        Construct the propagator.
+
+        Parameters
+        ----------
+        Lx: float (m)
+            Full size of the calculation domain along x-axis.
+
+        Ly: float (m)
+            Full size of the calculation domain along y-axis.
+
+        Lkz: float (1/m)
+            Total spectral width in units of wavenumbers.
+
+        Nx: int
+            Number of nodes of the x-grid.
+
+        Ny: int
+            Number of nodes of the y-grid.
+
+        Nkz: int
+            Number of spectral modes (wavenumbers) to resolve the temporal
+            profile of the wave.
+
+        k0: float (1/m)
+            Central wavenumber of the spectral domain.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+        """
+        self.init_kz(Lkz, Nkz, k0)
+        self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
+        self.init_DHT()
+
+    def init_DHT(self):
+        """
+        Setup data buffers for DHT transformation.
+        """
+        Nr = self.Nr
+        Nx = self.Nx
+        Ny = self.Ny
+        self.Nr_new = Nr
+
+        dtype = self.dtype
+
+        self.u_loc = np.zeros(self.Nr, dtype=dtype)
+        self.u_ht = np.zeros(self.Nr, dtype=dtype)
+        self.u_iht = np.zeros(self.Nr, dtype=dtype)
+
+    def DHT(self, u_in, u_out):
+        """
+        Forward DHT transform.
+
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-radial field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-spectral field.
+        """
+
+        u_in = u_in.reshape(self.Nx, self.Ny)
+
+        u_out[:] = np.fft.fft2(u_in).flatten()
+        return u_out
+
+    def iDHT(self, u_in, u_out):
+        """
+        Inverse DHT transform.
+
+        Parameters
+        ----------
+        u_in: 2darray of complex
+            Array with the spectral-spectral field.
+
+        u_out: 2darray of complex (is also Returned)
+            Array with the spectral-radial field.
+        """
+        u_in = u_in.reshape(self.Nx, self.Ny)
+        u_out[:] = np.fft.ifft2(u_in).flatten()
+
         return u_out
