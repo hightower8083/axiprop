@@ -31,9 +31,8 @@ def laser_from_fu(fu, kz, r, normalize=False):
 
     fu = njit(fu)
 
-    shape2d = (kz.size, r.size)
-
-    a0 = fu( kz[:,None]*np.ones(shape2d), r[None,:]*np.ones(shape2d) )
+    a0 = fu( ( kz * np.ones((*kz.shape, *r.shape)).T ).T,
+             r[None,:] * np.ones((*kz.shape, *r.shape)) )
 
     if normalize:
         a0 /= (np.abs(a0)**2).sum(0).max()**0.5
@@ -46,7 +45,10 @@ def mirror_parabolic(f0, kz, r):
     representing the on-axis Parabolic Mirror
     """
     s_ax = r**2/4/f0
-    return np.exp(-2j * s_ax[None,:] * kz[:,None])
+
+    val = np.exp(-2j * s_ax[None,:] * \
+                 ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
+    return val
 
 @njit
 def get_temporal_1d(u, u_t, t, kz, Nr_loc):
