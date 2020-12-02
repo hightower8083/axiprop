@@ -151,6 +151,7 @@ class PropagatorCommon:
         u: 2darray of complex or double
             Overwritten array with the propagated field.
         """
+        assert u.dtype == self.dtype
         u_out = np.empty((self.Nkz, *self.shape_trns_new),
                          dtype=self.dtype)
 
@@ -180,6 +181,7 @@ class PropagatorCommon:
         u: 3darray of complex or double
             Array with the steps of the propagated field.
         """
+        assert u.dtype == self.dtype
         Nsteps = len(dz)
         if Nsteps==0:
             return None
@@ -570,9 +572,10 @@ class PropagatorFFTW(PropagatorCommon):
         self.u_iht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
 
         self.fft = pyfftw.FFTW( self.u_loc, self.u_ht, axes=(-1,0),
-            direction='FFTW_FORWARD', threads=threads)
+            direction='FFTW_FORWARD', threads=threads, flags=('FFTW_MEASURE', ),)
         self.ifft = pyfftw.FFTW( self.u_ht, self.u_iht, axes=(-1,0),
-            direction='FFTW_BACKWARD', threads=threads, normalise_idft=True)
+            direction='FFTW_BACKWARD', threads=threads, flags=('FFTW_MEASURE', ),
+            normalise_idft=True)
 
     def TST(self):
         """
