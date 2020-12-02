@@ -130,8 +130,8 @@ class PropagatorCommon:
         self.kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
         self.ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
 
-        self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 ).flatten()
-        self.kr = np.sqrt(self.kx[:,None]**2 + self.ky[None,:]**2).flatten()
+        self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
+        self.kr = np.sqrt(self.kx[:,None]**2 + self.ky[None,:]**2)
         self.Nr = self.r.size
 
     def step(self, u, dz):
@@ -151,20 +151,19 @@ class PropagatorCommon:
         u: 2darray of complex or double
             Overwritten array with the propagated field.
         """
-        assert u.shape[0] == self.Nkz
-        assert u.shape[1] == self.Nr
-        assert self.dtype == u.dtype
+        u_out = np.empty((self.Nkz, *self.shape_trns_new),
+                         dtype=self.dtype)
 
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
-            self.u_ht = self.TST(self.u_loc, self.u_ht)
-            self.u_ht *= np.exp(1j * dz * np.sqrt(self.kz[ikz]**2 - self.kr**2))
-            self.u_iht = self.iTST(self.u_ht, self.u_iht)
-            u[ikz, :self.Nr_new] = self.u_iht
+            #self.u_ht = self.TST(self.u_loc, self.u_ht)
+            self.TST()
+            self.u_ht *= np.exp(1j*dz * np.sqrt(self.kz[ikz]**2 - self.kr**2))
+            self.iTST()
+            #self.u_iht = self.iTST(self.u_ht, self.u_iht)
+            u_out[ikz, :] = self.u_iht
 
-        u = u[:, :self.Nr_new]
-
-        return u
+        return u_out
 
     def steps(self, u, dz, verbose=True):
         """
@@ -187,22 +186,21 @@ class PropagatorCommon:
         if Nsteps==0:
             return None
 
-        assert u.shape[0] == self.Nkz
-        assert u.shape[1] == self.Nr
-        assert self.dtype == u.dtype
-
-        u_steps = np.empty((Nsteps, self.Nkz, self.Nr_new), dtype=self.dtype)
+        u_steps = np.empty((Nsteps, self.Nkz, *self.shape_trns_new),
+                           dtype=self.dtype)
 
         if verbose:
-            print('Propagating:')
+            print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
-            self.u_ht = self.TST(self.u_loc, self.u_ht)
+            #self.u_ht = self.TST(self.u_loc, self.u_ht)
+            self.TST()
             ik_loc = 1j * np.sqrt(self.kz[ikz]**2 - self.kr**2)
             for i_step in range(Nsteps):
                 self.u_ht *= np.exp( dz[i_step] * ik_loc )
-                self.u_iht = self.iTST(self.u_ht, self.u_iht)
+                #self.u_iht = self.iTST(self.u_ht, self.u_iht)
+                self.iTST()
                 u_steps[i_step, ikz, :] = self.u_iht
 
                 if verbose:
@@ -287,42 +285,27 @@ class PropagatorSymmetric(PropagatorCommon):
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
 
+        self.shape_trns_new = (self.Nr_new,)
+
         self.u_loc = np.zeros(self.Nr, dtype=dtype)
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
-    def TST(self, u_in, u_out):
+    def TST(self):
         """
         Forward QDHT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-radial field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-spectral field.
         """
-        u_in = u_in/self._j
-        u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
-        return u_out
+        self.u_loc = self.u_loc/self._j
+        self.u_ht = np.dot(self.TM.astype(self.dtype), self.u_loc,
+                           out=self.u_ht)
 
-    def iTST(self, u_in, u_out):
+    def iTST(self):
         """
         Inverse QDHT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-spectral field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-radial field.
         """
-        u_out = np.dot(self.TM[:self.Nr_new].astype(self.dtype),
-                       u_in, out=u_out)
-        u_out *= self._j[:self.Nr_new]
-        return u_out
+        self.u_iht = np.dot(self.TM[:self.Nr_new].astype(self.dtype),
+                       self.u_ht, out=self.u_iht)
+        self.u_iht *= self._j[:self.Nr_new]
 
 class PropagatorResampling(PropagatorCommon):
     """
@@ -411,39 +394,25 @@ class PropagatorResampling(PropagatorCommon):
         self.TM = pinv2(invTM, check_finite=False)
         self.invTM = j0(self.r_new[:,None] * self.kr[None,:])
 
+        self.shape_trns_new = (self.Nr_new,)
+
         self.u_loc = np.zeros(self.Nr, dtype=dtype)
         self.u_ht = np.zeros(self.Nr, dtype=dtype)
         self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
 
-    def TST(self, u_in, u_out):
+    def TST(self):
         """
         Forward DHT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-radial field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-spectral field.
         """
-        u_out = np.dot(self.TM.astype(self.dtype), u_in, out=u_out)
-        return u_out
+        self.u_ht = np.dot(self.TM.astype(self.dtype), self.u_loc,
+                           out=self.u_ht)
 
-    def iTST(self, u_in, u_out):
+    def iTST(self):
         """
         Inverse DHT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-spectral field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-radial field.
         """
-        u_out = np.dot(self.invTM.astype(self.dtype), u_in, out=u_out)
-        return u_out
+        self.u_iht = np.dot(self.invTM.astype(self.dtype), self.u_ht,
+                       out=self.u_iht)
 
 class PropagatorFFT2(PropagatorCommon):
     """
@@ -505,41 +474,23 @@ class PropagatorFFT2(PropagatorCommon):
 
         dtype = self.dtype
 
-        self.u_loc = np.zeros(self.Nr, dtype=dtype)
-        self.u_ht = np.zeros(self.Nr, dtype=dtype)
-        self.u_iht = np.zeros(self.Nr, dtype=dtype)
+        self.shape_trns_new = (Nx, Ny)
 
-    def TST(self, u_in, u_out):
+        self.u_loc = np.zeros((Nx, Ny), dtype=dtype)
+        self.u_ht = np.zeros((Nx, Ny), dtype=dtype)
+        self.u_iht = np.zeros((Nx, Ny), dtype=dtype)
+
+    def TST(self):
         """
         Forward FFT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-radial field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-spectral field.
         """
-        u_in = u_in.reshape(self.Nx, self.Ny)
-        u_out[:] = fft2(u_in, norm='ortho').flatten()
-        return u_out
+        self.u_ht[:] = fft2(self.u_loc, norm='ortho')
 
-    def iTST(self, u_in, u_out):
+    def iTST(self):
         """
         Inverse FFT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-spectral field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-radial field.
         """
-        u_in = u_in.reshape(self.Nx, self.Ny)
-        u_out[:] = ifft2(u_in, norm='ortho').flatten()
-        return u_out
+        self.u_iht[:] = ifft2(self.u_ht, norm='ortho')
 
 class PropagatorFFTW(PropagatorCommon):
     """
@@ -616,47 +567,25 @@ class PropagatorFFTW(PropagatorCommon):
 
         dtype = self.dtype
 
-        self.u_loc = np.zeros(self.Nr, dtype=dtype)
-        self.u_ht = np.zeros(self.Nr, dtype=dtype)
-        self.u_iht = np.zeros(self.Nr, dtype=dtype)
+        self.shape_trns_new = (Nx, Ny)
 
-        self.in_buff = pyfftw.empty_aligned( (Nx, Ny), dtype=np.complex128 )
-        self.out_buff = pyfftw.empty_aligned( (Nx, Ny), dtype=np.complex128 )
-        self.fft = pyfftw.FFTW( self.in_buff, self.out_buff, axes=(-1,0),
+        self.u_loc = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
+        self.u_ht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
+        self.u_iht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
+
+        self.fft = pyfftw.FFTW( self.u_loc, self.u_ht, axes=(-1,0),
             direction='FFTW_FORWARD', threads=threads)
-        self.ifft = pyfftw.FFTW( self.in_buff, self.out_buff, axes=(-1,0),
+        self.ifft = pyfftw.FFTW( self.u_ht, self.u_iht, axes=(-1,0),
             direction='FFTW_BACKWARD', threads=threads, normalise_idft=True)
 
-    def TST(self, u_in, u_out):
+    def TST(self):
         """
         Forward FFT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-radial field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-spectral field.
         """
-        self.in_buff[:] = u_in.reshape(self.Nx, self.Ny)
         self.fft()
-        u_out[:] = self.out_buff.flatten()
-        return u_out
 
-    def iTST(self, u_in, u_out):
+    def iTST(self):
         """
         Inverse FFT transform.
-
-        Parameters
-        ----------
-        u_in: 2darray of complex
-            Array with the spectral-spectral field.
-
-        u_out: 2darray of complex (is also Returned)
-            Array with the spectral-radial field.
         """
-        self.in_buff[:] = u_in.reshape(self.Nx, self.Ny)
         self.ifft()
-        u_out[:] = self.out_buff.flatten()
-        return u_out
