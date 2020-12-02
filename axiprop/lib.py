@@ -8,6 +8,8 @@ This file contains main classes of axiprop:
 - PropagatorCommon
 - PropagatorSymmetric
 - PropagatorResampling
+- PropagatorFFT2
+- PropagatorFFTW
 """
 import numpy as np
 from scipy.constants import c
@@ -19,6 +21,14 @@ try:
     have_pyfftw = True
 except Exception:
     have_pyfftw = False
+
+try:
+    import mkl_fft
+    fft2 = mkl_fft._numpy_fft.fft2
+    ifft2 = mkl_fft._numpy_fft.ifft2
+except Exception:
+    fft2 = np.fft.fft2
+    ifft2 = np.fft.ifft2
 
 class PropagatorCommon:
     """
@@ -445,7 +455,7 @@ class PropagatorFFT2(PropagatorCommon):
     - perform a forward FFT;
     - perform a inverse FFT;
 
-    This class uses serial Numpy `fft` library.
+    This class uses either Intel's `mkl_fft` or if unavailable the serial Numpy `fft`.
     """
 
     def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
@@ -512,7 +522,7 @@ class PropagatorFFT2(PropagatorCommon):
             Array with the spectral-spectral field.
         """
         u_in = u_in.reshape(self.Nx, self.Ny)
-        u_out[:] = np.fft.fft2(u_in, norm='ortho').flatten()
+        u_out[:] = fft2(u_in, norm='ortho').flatten()
         return u_out
 
     def iTST(self, u_in, u_out):
@@ -528,13 +538,13 @@ class PropagatorFFT2(PropagatorCommon):
             Array with the spectral-radial field.
         """
         u_in = u_in.reshape(self.Nx, self.Ny)
-        u_out[:] = np.fft.ifft2(u_in, norm='ortho').flatten()
+        u_out[:] = ifft2(u_in, norm='ortho').flatten()
         return u_out
 
 class PropagatorFFTW(PropagatorCommon):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
-    for TST. This class uses Numpy `fft` library.
+    for TST.
 
     Contains methods to:
     - setup FFTW object and TST data buffers;
@@ -542,7 +552,7 @@ class PropagatorFFTW(PropagatorCommon):
     - perform a inverse FFT;
 
     This class uses FFTW library via `pyfftw` wrapper, and can be used with
-    multiple processors. This method is typically 2 times faster than
+    multiple processors. This method can be ~2 times faster than serial
     PropagatorFFT2.
     """
 
