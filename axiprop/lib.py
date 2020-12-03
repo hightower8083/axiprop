@@ -168,7 +168,8 @@ class PropagatorCommon:
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
             self.TST()
-            self.u_ht *= np.exp(1j*dz * np.sqrt(self.kz[ikz]**2 - self.kr**2))
+            self.u_ht *= np.exp(1j*dz \
+                * np.sqrt(np.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
             u_out[ikz, :] = self.u_iht
 
@@ -205,7 +206,7 @@ class PropagatorCommon:
         for ikz in range(self.Nkz):
             self.u_loc[:] = u[ikz,:]
             self.TST()
-            ik_loc = 1j * np.sqrt(self.kz[ikz]**2 - self.kr**2)
+            ik_loc = 1j * np.sqrt(np.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
                 self.u_ht *= np.exp( dz[i_step] * ik_loc )
                 self.iTST()
