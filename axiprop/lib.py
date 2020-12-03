@@ -107,10 +107,12 @@ class PropagatorCommon:
             Full size of the calculation domain along y-axis.
 
         Nx: int
-            Number of nodes of the x-grid.
+            Number of nodes of the x-grid. Better be an odd number,
+            in order to make a symmteric grid.
 
         Ny: int
-            Number of nodes of the y-grid.
+            Number of nodes of the y-grid.Better be an odd number,
+            in order to make a symmteric grid.
 
         dtype: type
             Data type to be used.
@@ -126,6 +128,14 @@ class PropagatorCommon:
         self.y = np.linspace(-Ly/2, Ly/2, Ny)
         dx = self.x[1] - self.x[0]
         dy = self.y[1] - self.y[0]
+
+        if Nx==1 and Ny>1:
+            self.x = np.array( [0.0, ] )
+            dx = dy
+
+        if Ny==1 and Nx>1:
+            self.y = np.array( [0.0, ] )
+            dy = dx
 
         self.kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
         self.ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
@@ -204,8 +214,7 @@ class PropagatorCommon:
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
                           f"for wavelength {ikz+1} of {self.Nkz}",
-                      end='\r', flush=True)
-
+                          end='\r', flush=True)
         return u_steps
 
 class PropagatorSymmetric(PropagatorCommon):
@@ -572,9 +581,9 @@ class PropagatorFFTW(PropagatorCommon):
         self.u_iht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
 
         self.fft = pyfftw.FFTW( self.u_loc, self.u_ht, axes=(-1,0),
-            direction='FFTW_FORWARD', threads=threads, flags=('FFTW_MEASURE', ),)
+            direction='FFTW_FORWARD', flags=('FFTW_MEASURE', ), threads=threads)
         self.ifft = pyfftw.FFTW( self.u_ht, self.u_iht, axes=(-1,0),
-            direction='FFTW_BACKWARD', threads=threads, flags=('FFTW_MEASURE', ),
+            direction='FFTW_BACKWARD', flags=('FFTW_MEASURE', ), threads=threads,
             normalise_idft=True)
 
     def TST(self):
