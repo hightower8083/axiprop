@@ -1,18 +1,21 @@
 # Axiprop
-Simple tool to compute optical propagation, based on the discrete 
-Hankel and Fourier transforms
+Simple tool to compute optical propagation, based on the discrete Hankel and 
+Fourier transforms
 
 ### Contents
 
 This library contains methods and convenience tools to model propagation of the 3D optical
-field. 
+field. Computation part is implemented on
+- **CPU** using the basic NumPy methods enhanced via `mkl_fft` or [pyfftw](https://github.com/pyFFTW/pyFFTW)
+- or for **GPGPU** using [ArrayFire](https://arrayfire.com) library via 
+[arrayfire-python](https://github.com/arrayfire/arrayfire-python) bindings
 
 Currently methods include:
 - `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
 [[M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)](https://doi.org/10.1364/JOSAA.21.000053)]
 - `PropagatorResampling`: cylindical axisymmetric propagator with a more generic DHT which allows for arbitrary
 sampling of radial axis
-- `PropagatorFFT2`: fully 3D FFT-based propagator implemented with `numpy.fft` library
+- `PropagatorFFT2`: fully 3D FFT-based propagator
 - `PropagatorFFTW`: same fully 3D FFT-based propagator but using [FFTW](http://www.fftw.org/) library 
 via [pyfftw](https://github.com/pyFFTW/pyFFTW) wrapper.
 
@@ -82,3 +85,8 @@ or directly via PiPy
 ```bash
 pip install git+https://github.com/hightower8083/axiprop.git
 ```
+
+Note that performance enhancment libraries [pyfftw](https://github.com/pyFFTW/pyFFTW), 
+[mkl_fft](https://github.com/IntelPython/mkl_fft) and 
+[ArrayFire](https://arrayfire.com)+[arrayfire-python](https://github.com/arrayfire/arrayfire-python) 
+are not *required* nor included, and thus should be installated separately
