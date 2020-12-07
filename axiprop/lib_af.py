@@ -78,7 +78,7 @@ class PropagatorCommon:
         alpha = alpha[:-1]
 
         self.r = Rmax * alpha / alpha_np1
-        self.kr = af.interop.from_ndarray(alpha/Rmax)
+        self.kr = af.from_ndarray(alpha/Rmax)
 
     def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
         """
@@ -129,7 +129,7 @@ class PropagatorCommon:
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
         self.Nr = self.r.size
-        self.kr = af.interop.from_ndarray(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
+        self.kr = af.from_ndarray(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
     def step(self, u, dz):
         """
@@ -154,12 +154,12 @@ class PropagatorCommon:
                           dtype=u.dtype)
 
         for ikz in range(self.Nkz):
-            self.u_loc[:] = af.interop.from_ndarray(u[ikz,:])
+            self.u_loc = af.from_ndarray(u[ikz,:])
             self.TST()
             self.u_ht *= af.exp(1j*dz \
                 * af.sqrt(af.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
-            u_step[ikz, :] = self.u_iht.to_ndarray()
+            u_step[ikz] = self.u_iht.to_ndarray()
 
         return u_step
 
@@ -192,7 +192,7 @@ class PropagatorCommon:
             print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
-            self.u_loc[:] = af.interop.from_ndarray(u[ikz,:])
+            self.u_loc[:] = af.from_ndarray(u[ikz,:])
             self.TST()
             ik_loc = af.sqrt(af.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
@@ -277,16 +277,16 @@ class PropagatorSymmetric(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self._j = af.interop.from_ndarray((np.abs(j1(alpha)) / Rmax))
+        self._j = af.from_ndarray((np.abs(j1(alpha)) / Rmax))
 
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
-        self.TM = af.interop.from_ndarray(self.TM.astype(dtype))
+        self.TM = af.from_ndarray(self.TM.astype(dtype))
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_ht = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_iht = af.interop.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
+        self.u_loc = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = af.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
@@ -389,19 +389,19 @@ class PropagatorResampling(PropagatorCommon):
         kr = self.kr.to_ndarray()
 
         self.TM = j0(self.r[:,None] * kr[None,:])
-        self.TM = af.interop.from_ndarray(self.TM)
+        self.TM = af.from_ndarray(self.TM)
         self.TM = af.inverse(self.TM)
         self.TM = self.TM.as_type(dtype_af)
 
-        self.invTM = af.interop.from_ndarray(\
+        self.invTM = af.from_ndarray(\
             j0(self.r_new[:,None]*kr[None,:]).astype(dtype))
 
         self.shape_trns_new = (self.Nr_new,)
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_ht = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_iht = af.interop.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
+        self.u_loc = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = af.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
@@ -475,9 +475,9 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_ht = af.interop.from_ndarray(np.zeros(self.Nr, dtype=dtype))
-        self.u_iht = af.interop.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
+        self.u_loc = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = af.from_ndarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = af.from_ndarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
