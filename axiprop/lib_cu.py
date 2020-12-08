@@ -9,26 +9,12 @@ This file contains main classes of axiprop:
 - PropagatorSymmetric
 - PropagatorResampling
 - PropagatorFFT2
-- PropagatorFFTW
 """
 import numpy as np
 from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
-from scipy.linalg import pinv2
 
-try:
-    import pyfftw
-    have_pyfftw = True
-except Exception:
-    have_pyfftw = False
-
-try:
-    import mkl_fft
-    fft2 = mkl_fft._numpy_fft.fft2
-    ifft2 = mkl_fft._numpy_fft.ifft2
-except Exception:
-    fft2 = np.fft.fft2
-    ifft2 = np.fft.ifft2
+import cupy as cp
 
 class PropagatorCommon:
     """
@@ -59,13 +45,14 @@ class PropagatorCommon:
         k0: float (1/m)
             Central wavenumber of the spectral domain.
         """
+
+        self.dtype = np.complex
+
         Nkz_2 = int(np.ceil(Nkz/2))
         half_ax = np.linspace(0, 1., Nkz_2)
         full_ax = np.r_[-half_ax[1:][::-1], half_ax]
-
-        self.kz = k0 + Lkz / 2 * full_ax
         self.Nkz = full_ax.size
-        self.dtype = np.complex
+        self.kz = k0 + Lkz / 2 * full_ax
 
     def init_rkr_jroot_both(self, Rmax, Nr, dtype):
         """
@@ -91,7 +78,7 @@ class PropagatorCommon:
         alpha = alpha[:-1]
 
         self.r = Rmax * alpha / alpha_np1
-        self.kr = alpha/Rmax
+        self.kr = cp.asarray(alpha/Rmax)
 
     def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
         """
@@ -137,12 +124,12 @@ class PropagatorCommon:
             self.y = np.array( [0.0, ] )
             dy = dx
 
-        self.kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
-        self.ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
+        kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
+        ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
-        self.kr = np.sqrt(self.kx[:,None]**2 + self.ky[None,:]**2)
         self.Nr = self.r.size
+        self.kr = cp.asarray(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
     def step(self, u, dz):
         """
@@ -162,18 +149,19 @@ class PropagatorCommon:
             Overwritten array with the propagated field.
         """
         assert u.dtype == self.dtype
-        u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                         dtype=self.dtype)
+
+        u_step = np.empty((self.Nkz, *self.shape_trns_new),
+                          dtype=u.dtype)
 
         for ikz in range(self.Nkz):
-            self.u_loc[:] = u[ikz,:]
+            self.u_loc = cp.asarray(u[ikz,:])
             self.TST()
-            self.u_ht *= np.exp(1j*dz \
-                * np.sqrt(np.abs(self.kz[ikz]**2 - self.kr**2 )))
+            self.u_ht *= cp.exp(1j*dz \
+                * cp.sqrt(cp.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
-            u_out[ikz, :] = self.u_iht
+            u_step[ikz] = cp.asnumpy(self.u_iht)
 
-        return u_out
+        return u_step
 
     def steps(self, u, dz, verbose=True):
         """
@@ -197,20 +185,20 @@ class PropagatorCommon:
         if Nsteps==0:
             return None
 
-        u_steps = np.empty((Nsteps, self.Nkz, *self.shape_trns_new),
-                           dtype=self.dtype)
+        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+                         dtype=u.dtype)
 
         if verbose:
             print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
-            self.u_loc[:] = u[ikz,:]
+            self.u_loc = cp.asarray(u[ikz])
             self.TST()
-            ik_loc = 1j * np.sqrt(np.abs(self.kz[ikz]**2 - self.kr**2))
+            ik_loc = cp.sqrt(cp.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
-                self.u_ht *= np.exp( dz[i_step] * ik_loc )
+                self.u_ht *= cp.exp(  1j * dz[i_step] * ik_loc )
                 self.iTST()
-                u_steps[i_step, ikz, :] = self.u_iht
+                u_steps[i_step, ikz, :] = cp.asnumpy(self.u_iht)
 
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
@@ -289,30 +277,29 @@ class PropagatorSymmetric(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self._j = (np.abs(j1(alpha)) / Rmax).astype(dtype)
+        self._j = cp.asarray((np.abs(j1(alpha)) / Rmax))
+
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
+        self.TM = cp.asarray(self.TM.astype(dtype))
 
         self.shape_trns_new = (self.Nr_new,)
-
-        self.u_loc = np.zeros(self.Nr, dtype=dtype)
-        self.u_ht = np.zeros(self.Nr, dtype=dtype)
-        self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = cp.asarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
         Forward QDHT transform.
         """
-        self.u_loc = self.u_loc/self._j
-        self.u_ht = np.dot(self.TM.astype(self.dtype), self.u_loc,
-                           out=self.u_ht)
+        self.u_loc /= self._j
+        self.u_ht = cp.matmul(self.TM, self.u_loc)
 
     def iTST(self):
         """
         Inverse QDHT transform.
         """
-        self.u_iht = np.dot(self.TM[:self.Nr_new].astype(self.dtype),
-                       self.u_ht, out=self.u_iht)
+        self.u_iht = cp.matmul(self.TM[:self.Nr_new], self.u_ht)
         self.u_iht *= self._j[:self.Nr_new]
 
 class PropagatorResampling(PropagatorCommon):
@@ -398,31 +385,36 @@ class PropagatorResampling(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        invTM = j0(self.r[:,None] * self.kr[None,:])
-        self.TM = pinv2(invTM, check_finite=False)
-        self.invTM = j0(self.r_new[:,None] * self.kr[None,:])
+        kr = cp.asnumpy(self.kr)
+
+        self.TM = j0(self.r[:,None] * kr[None,:])
+        self.TM = cp.asarray(self.TM)
+        self.TM = cp.linalg.pinv(self.TM)
+        self.TM = self.TM.astype(dtype)
+
+        self.invTM = cp.asarray(\
+            j0(self.r_new[:,None]*kr[None,:]).astype(dtype))
 
         self.shape_trns_new = (self.Nr_new,)
 
-        self.u_loc = np.zeros(self.Nr, dtype=dtype)
-        self.u_ht = np.zeros(self.Nr, dtype=dtype)
-        self.u_iht = np.zeros(self.Nr_new, dtype=dtype)
+        self.shape_trns_new = (self.Nr_new,)
+        self.u_loc = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = cp.asarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
         Forward DHT transform.
         """
-        self.u_ht = np.dot(self.TM.astype(self.dtype), self.u_loc,
-                           out=self.u_ht)
+        self.u_ht = cp.matmul(self.TM, self.u_loc)
 
     def iTST(self):
         """
         Inverse DHT transform.
         """
-        self.u_iht = np.dot(self.invTM.astype(self.dtype), self.u_ht,
-                       out=self.u_iht)
+        self.u_iht = cp.matmul(self.invTM, self.u_ht)
 
-class PropagatorFFT_MKL_NP(PropagatorCommon):
+class PropagatorFFT2(PropagatorCommon):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
     for TST.
@@ -431,8 +423,6 @@ class PropagatorFFT_MKL_NP(PropagatorCommon):
     - setup TST data buffers;
     - perform a forward FFT;
     - perform a inverse FFT;
-
-    This class uses either Intel's `mkl_fft` or if unavailable the serial Numpy `fft`.
     """
 
     def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
@@ -484,123 +474,18 @@ class PropagatorFFT_MKL_NP(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = np.zeros((Nx, Ny), dtype=dtype)
-        self.u_ht = np.zeros((Nx, Ny), dtype=dtype)
-        self.u_iht = np.zeros((Nx, Ny), dtype=dtype)
+        self.u_loc = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_ht = cp.asarray(np.zeros(self.Nr, dtype=dtype))
+        self.u_iht = cp.asarray(np.zeros(self.Nr_new, dtype=dtype))
 
     def TST(self):
         """
         Forward FFT transform.
         """
-        self.u_ht[:] = fft2(self.u_loc, norm='ortho')
+        self.u_ht = cp.fft.fft2(self.u_loc, norm="ortho")
 
     def iTST(self):
         """
         Inverse FFT transform.
         """
-        self.u_iht[:] = ifft2(self.u_ht, norm='ortho')
-
-class PropagatorFFTW(PropagatorCommon):
-    """
-    Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
-    for TST.
-
-    Contains methods to:
-    - setup FFTW object and TST data buffers;
-    - perform a forward FFT;
-    - perform a inverse FFT;
-
-    This class uses FFTW library via `pyfftw` wrapper, and can be used with
-    multiple processors. This method can be ~2 times faster than serial
-    PropagatorFFT2.
-    """
-
-    def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0, Rmax_new=None,
-                 Nr_new=None, dtype=np.complex, threads=6):
-        """
-        Construct the propagator.
-
-        Parameters
-        ----------
-        Lx: float (m)
-            Full size of the calculation domain along x-axis.
-
-        Ly: float (m)
-            Full size of the calculation domain along y-axis.
-
-        Lkz: float (1/m)
-            Total spectral width in units of wavenumbers.
-
-        Nx: int
-            Number of nodes of the x-grid.
-
-        Ny: int
-            Number of nodes of the y-grid.
-
-        Nkz: int
-            Number of spectral modes (wavenumbers) to resolve the temporal
-            profile of the wave.
-
-        k0: float (1/m)
-            Central wavenumber of the spectral domain.
-
-        dtype: type (optional)
-            Data type to be used. Default is np.complex128.
-
-        threads: int
-            Number of threads to use for computations. Default is 4.
-        """
-        if not have_pyfftw:
-            print("This method requires `pyfftw`. " + \
-                "Install `pyfftw`, or use PropagatorFFT2 (slower numpy fft)")
-            return
-
-        self.init_kz(Lkz, Nkz, k0)
-        self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
-        self.init_TST(threads)
-
-    def init_TST(self, threads):
-        """
-        Setup data buffers for DHT transformation.
-
-        Parameters
-        ----------
-        threads: int
-            Number of threads to use for computations.
-        """
-        Nr = self.Nr
-        Nx = self.Nx
-        Ny = self.Ny
-        self.Nr_new = Nr
-
-        dtype = self.dtype
-
-        self.shape_trns_new = (Nx, Ny)
-
-        self.u_loc = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
-        self.u_ht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
-        self.u_iht = pyfftw.empty_aligned((Nx, Ny), dtype=dtype)
-
-        self.fft = pyfftw.FFTW( self.u_loc, self.u_ht, axes=(-1,0),
-            direction='FFTW_FORWARD', flags=('FFTW_MEASURE', ), threads=threads)
-        self.ifft = pyfftw.FFTW( self.u_ht, self.u_iht, axes=(-1,0),
-            direction='FFTW_BACKWARD', flags=('FFTW_MEASURE', ), threads=threads,
-            normalise_idft=True)
-
-    def TST(self):
-        """
-        Forward FFT transform.
-        """
-        self.fft()
-
-    def iTST(self):
-        """
-        Inverse FFT transform.
-        """
-        self.ifft()
-
-if have_pyfftw:
-    PropagatorFFT2 = PropagatorFFTW
-else:
-    PropagatorFFT2 = PropagatorFFT_MKL_NP
-
+        self.u_iht = cp.fft.ifft2(self.u_ht, norm="ortho")

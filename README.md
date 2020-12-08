@@ -6,9 +6,8 @@ Fourier transforms
 
 This library contains methods and convenience tools to model propagation of the 3D optical
 field. Computation part is implemented on
-- **CPU** using the basic NumPy methods enhanced via `mkl_fft` or [pyfftw](https://github.com/pyFFTW/pyFFTW)
-- or for **GPGPU** using [ArrayFire](https://arrayfire.com) library via 
-[arrayfire-python](https://github.com/arrayfire/arrayfire-python) bindings
+- **CPU** using the NumPy, optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or [pyfftw](https://github.com/pyFFTW/pyFFTW)
+- **GPU** using [CuPy](https://cupy.dev) or [ArrayFire](https://github.com/arrayfire/arrayfire-python)
 
 Currently methods include:
 - `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
@@ -16,8 +15,6 @@ Currently methods include:
 - `PropagatorResampling`: cylindical axisymmetric propagator with a more generic DHT which allows for arbitrary
 sampling of radial axis
 - `PropagatorFFT2`: fully 3D FFT-based propagator
-- `PropagatorFFTW`: same fully 3D FFT-based propagator but using [FFTW](http://www.fftw.org/) library 
-via [pyfftw](https://github.com/pyFFTW/pyFFTW) wrapper.
 
 ### Usage
 
@@ -86,7 +83,14 @@ or directly via PiPy
 pip install git+https://github.com/hightower8083/axiprop.git
 ```
 
-Note that performance enhancment libraries [pyfftw](https://github.com/pyFFTW/pyFFTW), 
-[mkl_fft](https://github.com/IntelPython/mkl_fft) and 
-[ArrayFire](https://arrayfire.com)+[arrayfire-python](https://github.com/arrayfire/arrayfire-python) 
-are not *required* nor included, and thus should be installated separately
+Note that enhancement libraries, 
+[numba](https://numba.pydata.org), 
+[pyfftw](https://github.com/pyFFTW/pyFFTW), 
+[mkl_fft](https://github.com/IntelPython/mkl_fft), 
+[ArrayFire](https://arrayfire.com)+
+[arrayfire-python](https://github.com/arrayfire/arrayfire-python) and 
+[CuPy](https://cupy.dev) are not *required* nor included, and should be 
+installated separately.
+
+To use *GPU* methods use `lib_cu` and `lib_af` for CuPy and ArrayFire 
+implementations.
