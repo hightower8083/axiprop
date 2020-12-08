@@ -6,8 +6,10 @@ Fourier transforms
 
 This library contains methods and convenience tools to model propagation of the 3D optical
 field. Computation part is implemented on
-- **CPU** using the NumPy, optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or [pyfftw](https://github.com/pyFFTW/pyFFTW)
-- **GPU** using [CuPy](https://cupy.dev) or [ArrayFire](https://github.com/arrayfire/arrayfire-python)
+- **CPU** using the NumPy, optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or 
+[pyfftw](https://github.com/pyFFTW/pyFFTW)
+- **GPU** using [CuPy](https://cupy.dev) or [arrayfire-python](https://github.com/arrayfire/arrayfire-python) (requires 
+[ArrayFire](https://arrayfire.com))
 
 Currently methods include:
 - `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
@@ -66,9 +68,7 @@ Plot the results using your favorite tools
 
 ![example_image](https://github.com/hightower8083/axiprop/blob/main/examples/example_figure.jpg)
 
-For more info checkout the 
-[example notebook](https://github.com/hightower8083/axiprop/blob/main/examples/example.ipynb)
-, and inline documentation of the methods.
+For more info checkout the example notebooks for [radial](https://github.com/hightower8083/axiprop/blob/main/examples/example.ipynb) and [cartesian](https://github.com/hightower8083/axiprop/blob/main/examples/test2d.ipynb) cases, and also look for methods documentation.
 
 ### Installation
 
@@ -87,8 +87,8 @@ Note that enhancement libraries,
 [numba](https://numba.pydata.org), 
 [pyfftw](https://github.com/pyFFTW/pyFFTW), 
 [mkl_fft](https://github.com/IntelPython/mkl_fft), 
-[ArrayFire](https://arrayfire.com)+
-[arrayfire-python](https://github.com/arrayfire/arrayfire-python) and 
+[ArrayFire](https://arrayfire.com)+[arrayfire-python](https://github.com/arrayfire/arrayfire-python)
+and 
 [CuPy](https://cupy.dev) are not *required* nor included, and should be 
 installated separately.
 
