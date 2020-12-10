@@ -5,11 +5,12 @@ Fourier transforms
 ### Contents
 
 This library contains methods and convenience tools to model propagation of the 3D optical
-field. Computation part is implemented on
-- **CPU** using the NumPy, optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or 
+field. Computations can be done using number of backends:
+- NumPy (**CPU**) optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or
 [pyfftw](https://github.com/pyFFTW/pyFFTW)
-- **GPU** using [CuPy](https://cupy.dev) or [arrayfire-python](https://github.com/arrayfire/arrayfire-python) (requires 
-[ArrayFire](https://arrayfire.com))
+- [CuPy](https://cupy.dev) for **GPU** calculations via Nvidia CUDA driver
+- [ArrayFire](https://arrayfire.com) for **GPU** calculations via CUDA or OpenCL drivers
+- [PyOpenCL](https://documen.tician.de/pyopencl) for **GPU** calculations via OpenCL driver
 
 Currently methods include:
 - `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
@@ -83,14 +84,14 @@ or directly via PiPy
 pip install git+https://github.com/hightower8083/axiprop.git
 ```
 
-Note that enhancement libraries, 
-[numba](https://numba.pydata.org), 
-[pyfftw](https://github.com/pyFFTW/pyFFTW), 
-[mkl_fft](https://github.com/IntelPython/mkl_fft), 
-[ArrayFire](https://arrayfire.com)+[arrayfire-python](https://github.com/arrayfire/arrayfire-python)
-and 
-[CuPy](https://cupy.dev) are not *required* nor included, and should be 
-installated separately.
+#### Additional requrements
 
-To use *GPU* methods use `lib_cu` and `lib_af` for CuPy and ArrayFire 
-implementations.
+Note that, while base backend `NP` requires only NumPy and SciPy, other 
+backends have specific dependencies:
+- `NP_MKL`:  [mkl_fft](https://github.com/IntelPython/mkl_fft)
+- `NP_FFTW`: [pyfftw](https://github.com/pyFFTW/pyFFTW)
+- `CU`: [cupy](https://cupy.dev)
+- `CL`: [pyopencl](https://documen.tician.de/pyopencl) 
+- `AF`:  [ArrayFire](https://arrayfire.com) and [arrayfire-python](https://github.com/arrayfire/arrayfire-python)
+
+Optional enhancements of utilities are acheieved if [Numba](https://numba.pydata.org) is installed.
