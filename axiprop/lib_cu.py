@@ -474,9 +474,9 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = cp.zeros(self.Nr, dtype=dtype)
-        self.u_ht = cp.zeros(self.Nr, dtype=dtype)
-        self.u_iht = cp.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = cp.zeros((Nx, Ny), dtype=dtype)
+        self.u_ht = cp.zeros((Nx, Ny), dtype=dtype)
+        self.u_iht = cp.zeros((Nx, Ny), dtype=dtype)
 
     def TST(self):
         """

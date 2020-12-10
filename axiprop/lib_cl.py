@@ -23,8 +23,9 @@ class GPU():
     import pyopencl.clmath as math
     from reikna.cluda import ocl_api
     from reikna.linalg import MatrixMul
+    from reikna.fft import FFT
 
-    ctx = create_some_context(answers=[1,2])
+    ctx = create_some_context() #answers=[1,2])
     queue = CommandQueue(ctx)
     api = ocl_api()
     thrd = api.Thread(cqd=queue)
@@ -62,6 +63,20 @@ class GPU():
             return c
 
         return matmul
+
+    def make_fft(self, vec_in, vec_out):
+        fft_reikna = self.FFT(vec_in).compile(self.thrd)
+
+        def fft2(a, b):
+            fft_reikna(b, a, inverse=0)[0].wait()
+            return b
+
+        def ifft2(a, b):
+            fft_reikna(b, a, inverse=1)[0].wait()
+            return b
+
+        return fft2, ifft2
+
 
     def pinv(self, M, dtype):
         M = pinv2(M, check_finite=False)
@@ -348,14 +363,14 @@ class PropagatorSymmetric(PropagatorCommon):
         self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
         self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
 
+        self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = gpu.make_matmul(self.TM[:self.Nr_new],
+                                           self.u_ht, self.u_iht)
+
     def TST(self):
         """
         Forward QDHT transform.
         """
-        if not self.TST_compiled:
-            self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
-            self.TST_compiled = True
-
         self.u_loc /= self._j
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
 
@@ -363,13 +378,8 @@ class PropagatorSymmetric(PropagatorCommon):
         """
         Inverse QDHT transform.
         """
-        if not self.iTST_compiled:
-            self.iTST_matmul = gpu.make_matmul(self.TM[:self.Nr_new],
-                                               self.u_ht, self.u_iht)
-            self.iTST_compiled = True
-
-        self.u_iht = self.iTST_matmul(self.TM[:self.Nr_new], self.u_ht,
-                                      self.u_iht)
+        self.u_iht = self.iTST_matmul(self.TM[:self.Nr_new],
+                                      self.u_ht, self.u_iht)
         self.u_iht *= self._j[:self.Nr_new]
 
 class PropagatorResampling(PropagatorCommon):
@@ -470,27 +480,19 @@ class PropagatorResampling(PropagatorCommon):
         self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
         self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
 
-        self.TST_compiled = False
-        self.iTST_compiled = False
+        self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = gpu.make_matmul(self.invTM, self.u_ht, self.u_iht)
 
     def TST(self):
         """
         Forward QDHT transform.
         """
-        if not self.TST_compiled:
-            self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
-            self.TST_compiled = True
-
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
 
     def iTST(self):
         """
         Inverse QDHT transform.
         """
-        if not self.iTST_compiled:
-            self.iTST_matmul = gpu.make_matmul(self.invTM,
-                                               self.u_ht, self.u_iht)
-            self.iTST_compiled = True
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
 
 
@@ -554,18 +556,20 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = gpu.zeros(self.Nr, dtype=dtype)
-        self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
-        self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = gpu.zeros((Nx, Ny), dtype=dtype)
+        self.u_ht = gpu.zeros((Nx, Ny), dtype=dtype)
+        self.u_iht = gpu.zeros((Nx, Ny), dtype=dtype)
+
+        self.fft2, self.ifft2 = gpu.make_fft(self.u_loc, self.u_ht)
 
     def TST(self):
         """
         Forward FFT transform.
         """
-        self.u_ht = cp.fft.fft2(self.u_loc, norm="ortho")
+        self.u_ht = self.fft2(self.u_loc, self.u_ht)
 
     def iTST(self):
         """
         Inverse FFT transform.
         """
-        self.u_iht = cp.fft.ifft2(self.u_ht, norm="ortho")
+        self.u_iht = self.ifft2(self.u_ht, self.u_iht)
