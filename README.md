@@ -91,7 +91,7 @@ backends have specific dependencies:
 - `NP_MKL`:  [mkl_fft](https://github.com/IntelPython/mkl_fft)
 - `NP_FFTW`: [pyfftw](https://github.com/pyFFTW/pyFFTW)
 - `CU`: [cupy](https://cupy.dev)
-- `CL`: [pyopencl](https://documen.tician.de/pyopencl) 
+- `CL`: [pyopencl](https://documen.tician.de/pyopencl) and [reikna](https://github.com/fjarri/reikna)
 - `AF`:  [ArrayFire](https://arrayfire.com) and [arrayfire-python](https://github.com/arrayfire/arrayfire-python)
 
 Optional enhancements of utilities are acheieved if [Numba](https://numba.pydata.org) is installed.
