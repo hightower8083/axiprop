@@ -10,11 +10,6 @@ axiprop/.ipynb_checkpoints/
 
 axiprop/utils_priv.py
 
-scripts/*.DS_Store
-scripts/__pycache__
-scripts/*.pyc
-scripts/.ipynb_checkpoints/
-
 build/
 dist/
 axiprop.egg-info/

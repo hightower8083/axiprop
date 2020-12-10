@@ -19,16 +19,22 @@ from .backends import BACKENDS
 if 'AXIPROP_BACKEND' in os.environ:
     AXIPROP_BACKEND = os.environ['AXIPROP_BACKEND']
     if AXIPROP_BACKEND in BACKENDS:
-        gpu = BACKENDS[AXIPROP_BACKEND]()
+        bcknd = BACKENDS[AXIPROP_BACKEND]()
     else:
         print(AXIPROP_BACKEND+' backend is not available')
         sys.exit(0)
 elif 'CU' in BACKENDS:
-    gpu = BACKENDS['CU']()
+    bcknd = BACKENDS['CU']()
 elif 'CL' in BACKENDS:
-    gpu = BACKENDS['CL']()
+    bcknd = BACKENDS['CL']()
 elif 'AF' in BACKENDS:
-    gpu = BACKENDS['AF']()
+    bcknd = BACKENDS['AF']()
+elif 'NP_MKL' in BACKENDS:
+    bcknd = BACKENDS['NP_MKL']()
+elif 'NP_FFTW' in BACKENDS:
+    bcknd = BACKENDS['NP_FFTW']()
+elif 'NP' in BACKENDS:
+    bcknd = BACKENDS['NP']()
 
 class PropagatorCommon:
     """
@@ -92,7 +98,7 @@ class PropagatorCommon:
         alpha = alpha[:-1]
 
         self.r = Rmax * alpha / alpha_np1
-        self.kr = gpu.send_to_device(alpha/Rmax)
+        self.kr = bcknd.send_to_device(alpha/Rmax)
 
     def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
         """
@@ -143,7 +149,7 @@ class PropagatorCommon:
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
         self.Nr = self.r.size
-        self.kr = gpu.send_to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
+        self.kr = bcknd.send_to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
     def step(self, u, dz):
         """
@@ -168,12 +174,12 @@ class PropagatorCommon:
                           dtype=u.dtype)
 
         for ikz in range(self.Nkz):
-            self.u_loc = gpu.send_to_device(u[ikz,:])
+            self.u_loc = bcknd.send_to_device(u[ikz,:])
             self.TST()
-            self.u_ht *= gpu.exp(1j*dz \
-                * gpu.sqrt(gpu.abs(self.kz[ikz]**2 - self.kr**2 )))
+            self.u_ht *= bcknd.exp(1j*dz \
+                * bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
-            u_step[ikz] = gpu.get(self.u_iht)
+            u_step[ikz] = bcknd.get(self.u_iht)
 
         return u_step
 
@@ -206,13 +212,13 @@ class PropagatorCommon:
             print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
-            self.u_loc = gpu.send_to_device(u[ikz])
+            self.u_loc = bcknd.send_to_device(u[ikz])
             self.TST()
-            ik_loc = gpu.sqrt(gpu.abs(self.kz[ikz]**2 - self.kr**2))
+            ik_loc = bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
-                self.u_ht *= gpu.exp(  1j * dz[i_step] * ik_loc )
+                self.u_ht *= bcknd.exp(  1j * dz[i_step] * ik_loc )
                 self.iTST()
-                u_steps[i_step, ikz, :] = gpu.get(self.u_iht)
+                u_steps[i_step, ikz, :] = bcknd.get(self.u_iht)
 
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
@@ -291,22 +297,22 @@ class PropagatorSymmetric(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self._j = gpu.send_to_device((np.abs(j1(alpha)) / Rmax))
+        self._j = bcknd.send_to_device((np.abs(j1(alpha)) / Rmax))
 
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
-        self.TM = gpu.send_to_device(self.TM, dtype)
+        self.TM = bcknd.send_to_device(self.TM, dtype)
 
         self.TST_compiled = False
         self.iTST_compiled = False
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = gpu.zeros(self.Nr, dtype)
-        self.u_ht = gpu.zeros(self.Nr, dtype)
-        self.u_iht = gpu.zeros(self.Nr_new, dtype)
+        self.u_loc = bcknd.zeros(self.Nr, dtype)
+        self.u_ht = bcknd.zeros(self.Nr, dtype)
+        self.u_iht = bcknd.zeros(self.Nr_new, dtype)
 
-        self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
-        self.iTST_matmul = gpu.make_matmul(self.TM[:self.Nr_new],
+        self.TST_matmul = bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = bcknd.make_matmul(self.TM[:self.Nr_new],
                                            self.u_ht, self.u_iht)
 
     def TST(self):
@@ -407,23 +413,23 @@ class PropagatorResampling(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        kr = gpu.get(self.kr)
+        kr = bcknd.get(self.kr)
 
         self.TM = j0(self.r[:,None] * kr[None,:])
-        self.TM = gpu.pinv(self.TM, dtype)
+        self.TM = bcknd.pinv(self.TM, dtype)
 
-        self.invTM = gpu.send_to_device(\
+        self.invTM = bcknd.send_to_device(\
             j0(self.r_new[:,None]*kr[None,:]), dtype)
 
         self.shape_trns_new = (self.Nr_new,)
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = gpu.zeros(self.Nr, dtype)
-        self.u_ht = gpu.zeros(self.Nr, dtype)
-        self.u_iht = gpu.zeros(self.Nr_new, dtype)
+        self.u_loc = bcknd.zeros(self.Nr, dtype)
+        self.u_ht = bcknd.zeros(self.Nr, dtype)
+        self.u_iht = bcknd.zeros(self.Nr_new, dtype)
 
-        self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
-        self.iTST_matmul = gpu.make_matmul(self.invTM, self.u_ht, self.u_iht)
+        self.TST_matmul = bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = bcknd.make_matmul(self.invTM, self.u_ht, self.u_iht)
 
     def TST(self):
         """
@@ -498,11 +504,11 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = gpu.zeros((Nx, Ny), dtype)
-        self.u_ht = gpu.zeros((Nx, Ny), dtype)
-        self.u_iht = gpu.zeros((Nx, Ny), dtype)
+        self.u_loc = bcknd.zeros((Nx, Ny), dtype)
+        self.u_ht = bcknd.zeros((Nx, Ny), dtype)
+        self.u_iht = bcknd.zeros((Nx, Ny), dtype)
 
-        self.fft2, self.ifft2 = gpu.make_fft(self.u_loc, self.u_ht, self.u_iht)
+        self.fft2, self.ifft2 = bcknd.make_fft(self.u_loc, self.u_ht, self.u_iht)
 
     def TST(self):
         """
