@@ -84,7 +84,7 @@ or directly via PiPy
 pip install git+https://github.com/hightower8083/axiprop.git
 ```
 
-#### Additional requrements
+#### Additional requirements
 
 Note that, while base backend `NP` requires only NumPy and SciPy, other 
 backends have specific dependencies:
