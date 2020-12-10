@@ -13,8 +13,65 @@ This file contains main classes of axiprop:
 import numpy as np
 from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
+from scipy.linalg import pinv2
 
-import cupy as cp
+class GPU():
+    from pyopencl import create_some_context
+    from pyopencl import CommandQueue
+    import pyopencl.array as arrcl
+    import pyopencl.clmath as clmath
+    import pyopencl.clmath as math
+    from reikna.cluda import ocl_api
+    from reikna.linalg import MatrixMul
+
+    ctx = create_some_context(answers=[1,2])
+    queue = CommandQueue(ctx)
+    api = ocl_api()
+    thrd = api.Thread(cqd=queue)
+
+    def get(self, arr_in):
+        arr_out = arr_in.get()
+        return arr_out
+
+    def zeros(self, shape, dtype):
+        arr_out = self.arrcl.zeros(self.queue, shape, dtype)
+        return arr_out
+
+    def sqrt(self, arr_in):
+        arr_out = self.clmath.sqrt(arr_in, self.queue)
+        return arr_out
+
+    def exp(self, arr_in):
+        arr_out = self.clmath.exp(arr_in, self.queue)
+        return arr_out
+
+    def abs(self, arr):
+        arr_out = arr.__abs__()
+        return arr_out
+
+    def send_to_device(self, arr_in):
+        arr_out = self.thrd.to_device(arr_in)
+        return arr_out
+
+    def make_matmul(self, matrix_in, vec_in, vec_out):
+        matmul_reikna = self.MatrixMul(matrix_in, vec_in[:,None],
+            out_arr=vec_out[:,None]).compile(self.thrd)
+
+        def matmul(a, b, c):
+            matmul_reikna(c, a, b)[0].wait()
+            return c
+
+        return matmul
+
+    def pinv(self, M, dtype):
+        M = pinv2(M, check_finite=False)
+        M = gpu.send_to_device(M)
+        return M
+        #self.TM = gpu.send_to_device(self.TM)
+        #self.TM = cp.linalg.pinv(self.TM)
+        #self.TM = self.TM.astype(dtype)
+
+gpu = GPU()
 
 class PropagatorCommon:
     """
@@ -78,7 +135,7 @@ class PropagatorCommon:
         alpha = alpha[:-1]
 
         self.r = Rmax * alpha / alpha_np1
-        self.kr = cp.asarray(alpha/Rmax)
+        self.kr = gpu.send_to_device(alpha/Rmax)
 
     def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
         """
@@ -129,7 +186,7 @@ class PropagatorCommon:
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
         self.Nr = self.r.size
-        self.kr = cp.asarray(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
+        self.kr = gpu.send_to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
     def step(self, u, dz):
         """
@@ -154,12 +211,12 @@ class PropagatorCommon:
                           dtype=u.dtype)
 
         for ikz in range(self.Nkz):
-            self.u_loc = cp.asarray(u[ikz,:])
+            self.u_loc = gpu.send_to_device(u[ikz,:])
             self.TST()
-            self.u_ht *= cp.exp(1j*dz \
-                * cp.sqrt(cp.abs(self.kz[ikz]**2 - self.kr**2 )))
+            self.u_ht *= gpu.exp(1j*dz \
+                * gpu.sqrt(gpu.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
-            u_step[ikz] = cp.asnumpy(self.u_iht)
+            u_step[ikz] = gpu.get(self.u_iht)
 
         return u_step
 
@@ -192,13 +249,13 @@ class PropagatorCommon:
             print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
-            self.u_loc = cp.asarray(u[ikz])
+            self.u_loc = gpu.send_to_device(u[ikz])
             self.TST()
-            ik_loc = cp.sqrt(cp.abs(self.kz[ikz]**2 - self.kr**2))
+            ik_loc = gpu.sqrt(gpu.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
-                self.u_ht *= cp.exp(  1j * dz[i_step] * ik_loc )
+                self.u_ht *= gpu.exp(  1j * dz[i_step] * ik_loc )
                 self.iTST()
-                u_steps[i_step, ikz, :] = cp.asnumpy(self.u_iht)
+                u_steps[i_step, ikz, :] = gpu.get(self.u_iht)
 
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
@@ -277,29 +334,42 @@ class PropagatorSymmetric(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self._j = cp.asarray((np.abs(j1(alpha)) / Rmax))
+        self._j = gpu.send_to_device((np.abs(j1(alpha)) / Rmax))
 
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
-        self.TM = cp.asarray(self.TM.astype(dtype))
+        self.TM = gpu.send_to_device(self.TM.astype(dtype))
+
+        self.TST_compiled = False
+        self.iTST_compiled = False
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = cp.zeros(self.Nr, dtype=dtype)
-        self.u_ht = cp.zeros(self.Nr, dtype=dtype)
-        self.u_iht = cp.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
 
     def TST(self):
         """
         Forward QDHT transform.
         """
+        if not self.TST_compiled:
+            self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
+            self.TST_compiled = True
+
         self.u_loc /= self._j
-        self.u_ht = cp.matmul(self.TM, self.u_loc)
+        self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
 
     def iTST(self):
         """
         Inverse QDHT transform.
         """
-        self.u_iht = cp.matmul(self.TM[:self.Nr_new], self.u_ht)
+        if not self.iTST_compiled:
+            self.iTST_matmul = gpu.make_matmul(self.TM[:self.Nr_new],
+                                               self.u_ht, self.u_iht)
+            self.iTST_compiled = True
+
+        self.u_iht = self.iTST_matmul(self.TM[:self.Nr_new], self.u_ht,
+                                      self.u_iht)
         self.u_iht *= self._j[:self.Nr_new]
 
 class PropagatorResampling(PropagatorCommon):
@@ -385,34 +455,44 @@ class PropagatorResampling(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        kr = cp.asnumpy(self.kr)
+        kr = gpu.get(self.kr)
 
         self.TM = j0(self.r[:,None] * kr[None,:])
-        self.TM = cp.asarray(self.TM)
-        self.TM = cp.linalg.pinv(self.TM)
-        self.TM = self.TM.astype(dtype)
+        self.TM = gpu.pinv(self.TM, dtype)
 
-        self.invTM = cp.asarray(\
-            j0(self.r_new[:,None]*kr[None,:]).astype(dtype))
+        self.invTM = gpu.send_to_device(\
+            j0(self.r_new[:,None]*kr[None,:]))
 
         self.shape_trns_new = (self.Nr_new,)
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = cp.zeros(self.Nr, dtype=dtype)
-        self.u_ht = cp.zeros(self.Nr, dtype=dtype)
-        self.u_iht = cp.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
+
+        self.TST_compiled = False
+        self.iTST_compiled = False
 
     def TST(self):
         """
-        Forward DHT transform.
+        Forward QDHT transform.
         """
-        self.u_ht = cp.matmul(self.TM, self.u_loc)
+        if not self.TST_compiled:
+            self.TST_matmul = gpu.make_matmul(self.TM, self.u_loc, self.u_ht)
+            self.TST_compiled = True
+
+        self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
 
     def iTST(self):
         """
-        Inverse DHT transform.
+        Inverse QDHT transform.
         """
-        self.u_iht = cp.matmul(self.invTM, self.u_ht)
+        if not self.iTST_compiled:
+            self.iTST_matmul = gpu.make_matmul(self.invTM,
+                                               self.u_ht, self.u_iht)
+            self.iTST_compiled = True
+        self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
+
 
 class PropagatorFFT2(PropagatorCommon):
     """
@@ -474,9 +554,9 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = cp.zeros(self.Nr, dtype=dtype)
-        self.u_ht = cp.zeros(self.Nr, dtype=dtype)
-        self.u_iht = cp.zeros(self.Nr_new, dtype=dtype)
+        self.u_loc = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_ht = gpu.zeros(self.Nr, dtype=dtype)
+        self.u_iht = gpu.zeros(self.Nr_new, dtype=dtype)
 
     def TST(self):
         """
