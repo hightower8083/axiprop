@@ -295,7 +295,7 @@ class PropagatorSymmetric(PropagatorCommon):
 
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
-        self.TM = gpu.send_to_device(self.TM.astype(dtype))
+        self.TM = gpu.send_to_device(self.TM, dtype)
 
         self.TST_compiled = False
         self.iTST_compiled = False
@@ -413,12 +413,11 @@ class PropagatorResampling(PropagatorCommon):
         self.TM = gpu.pinv(self.TM, dtype)
 
         self.invTM = gpu.send_to_device(\
-            j0(self.r_new[:,None]*kr[None,:]))
+            j0(self.r_new[:,None]*kr[None,:]), dtype)
 
         self.shape_trns_new = (self.Nr_new,)
 
         self.shape_trns_new = (self.Nr_new,)
-        print((self.Nr,), dtype)
         self.u_loc = gpu.zeros(self.Nr, dtype)
         self.u_ht = gpu.zeros(self.Nr, dtype)
         self.u_iht = gpu.zeros(self.Nr_new, dtype)

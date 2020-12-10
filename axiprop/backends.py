@@ -26,12 +26,11 @@ class BACKEND_NP():
     def get(self, arr_in):
         return arr_in
 
-    def send_to_device(self, arr_in):
+    def send_to_device(self, arr_in, dtype=None):
         return arr_in
 
     def pinv(self, M, dtype):
         M = pinv2(M)
-        M = M.astype(dtype)
         return M
 
     def make_matmul(self, matrix_in, vec_in, vec_out):
@@ -75,6 +74,10 @@ try:
             arr_out = arr_in.get()
             return arr_out
 
+        def send_to_device(self, arr_in, dtype=None):
+            arr_out = self.thrd.to_device(arr_in)
+            return arr_out
+
         def zeros(self, shape, dtype):
             arr_out = self.arrcl.zeros(self.queue, shape, dtype)
             return arr_out
@@ -89,10 +92,6 @@ try:
 
         def abs(self, arr):
             arr_out = arr.__abs__()
-            return arr_out
-
-        def send_to_device(self, arr_in):
-            arr_out = self.thrd.to_device(arr_in)
             return arr_out
 
         def pinv(self, M, dtype):
@@ -144,14 +143,14 @@ try:
             arr_out = self.cp.zeros(shape, dtype)
             return arr_out
 
-        def send_to_device(self, arr_in):
+        def send_to_device(self, arr_in, dtype=None):
             arr_out = self.cp.asarray(arr_in)
             return arr_out
 
         def pinv(self, M, dtype):
             M = self.send_to_device(M)
             M = self.cp.linalg.pinv(M)
-            M = M.astype(dtype)
+            # M = M.astype(dtype)
             return M
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
@@ -180,20 +179,20 @@ try:
     class BACKEND_AF():
         import arrayfire as af
 
-        sqrt = af.sqrt
-        exp = af.exp
-        abs = af.abs
-
-
         def get(self, arr_in):
-            arr_out = self.af.asnumpy(arr_in)
+            arr_out = arr_in.to_ndarray()
+            return arr_out
+
+        def send_to_device(self, arr_in, dtype=None):
+            if dtype is not None:
+                arr_in = arr_in.astype(dtype)
+            arr_out = self.af.from_ndarray(arr_in)
             return arr_out
 
         def zeros(self, shape, dtype):
             arr_out = self.af.from_ndarray(np.zeros(shape, dtype))
             return arr_out
 
-        """
         def sqrt(self, arr_in):
             arr_out = self.af.sqrt(arr_in)
             return arr_out
@@ -205,16 +204,12 @@ try:
         def abs(self, arr_in):
             arr_out = self.af.abs(arr_in)
             return arr_out
-        """
-
-        def send_to_device(self, arr_in):
-            arr_out = self.af.from_ndarray(arr_in)
-            return arr_out
 
         def pinv(self, M, dtype):
             M = self.send_to_device(M)
             M = self.af.inverse(M)
-            M = M.as_type(dtype)
+            dtype_af = self.af.to_dtype[np.dtype(dtype).char]
+            M = M.as_type(dtype_af)
             return M
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
