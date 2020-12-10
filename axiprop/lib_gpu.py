@@ -13,80 +13,22 @@ This file contains main classes of axiprop:
 import numpy as np
 from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
-from scipy.linalg import pinv2
+import os, sys
+from .backends import BACKENDS
 
-class GPU():
-    from pyopencl import create_some_context
-    from pyopencl import CommandQueue
-    import pyopencl.array as arrcl
-    import pyopencl.clmath as clmath
-    import pyopencl.clmath as math
-    from reikna.cluda import ocl_api
-    from reikna.linalg import MatrixMul
-    from reikna.fft import FFT
-
-    ctx = create_some_context() #answers=[1,2])
-    queue = CommandQueue(ctx)
-    api = ocl_api()
-    thrd = api.Thread(cqd=queue)
-
-    def get(self, arr_in):
-        arr_out = arr_in.get()
-        return arr_out
-
-    def zeros(self, shape, dtype):
-        arr_out = self.arrcl.zeros(self.queue, shape, dtype)
-        return arr_out
-
-    def sqrt(self, arr_in):
-        arr_out = self.clmath.sqrt(arr_in, self.queue)
-        return arr_out
-
-    def exp(self, arr_in):
-        arr_out = self.clmath.exp(arr_in, self.queue)
-        return arr_out
-
-    def abs(self, arr):
-        arr_out = arr.__abs__()
-        return arr_out
-
-    def send_to_device(self, arr_in):
-        arr_out = self.thrd.to_device(arr_in)
-        return arr_out
-
-    def make_matmul(self, matrix_in, vec_in, vec_out):
-        matmul_reikna = self.MatrixMul(matrix_in, vec_in[:,None],
-            out_arr=vec_out[:,None]).compile(self.thrd)
-
-        def matmul(a, b, c):
-            matmul_reikna(c, a, b)[0].wait()
-            return c
-
-        return matmul
-
-    def make_fft(self, vec_in, vec_out):
-        fft_reikna = self.FFT(vec_in).compile(self.thrd)
-
-        def fft2(a, b):
-            fft_reikna(b, a, inverse=0)[0].wait()
-            return b
-
-        def ifft2(a, b):
-            fft_reikna(b, a, inverse=1)[0].wait()
-            return b
-
-        return fft2, ifft2
-
-
-    def pinv(self, M, dtype):
-        M = pinv2(M, check_finite=False)
-        M = gpu.send_to_device(M)
-        return M
-        #self.TM = gpu.send_to_device(self.TM)
-        #self.TM = cp.linalg.pinv(self.TM)
-        #self.TM = self.TM.astype(dtype)
-
-gpu = GPU()
+if 'AXIPROP_BACKEND' in os.environ:
+    AXIPROP_BACKEND = os.environ['AXIPROP_BACKEND']
+    if AXIPROP_BACKEND in BACKENDS:
+        gpu = BACKENDS[AXIPROP_BACKEND]()
+    else:
+        print(AXIPROP_BACKEND+' backend is not available')
+        sys.exit(0)
+elif 'CU' in BACKENDS:
+    gpu = BACKENDS['CU']()
+elif 'CL' in BACKENDS:
+    gpu = BACKENDS['CL']()
+elif 'AF' in BACKENDS:
+    gpu = BACKENDS['AF']()
 
 class PropagatorCommon:
     """
