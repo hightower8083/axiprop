@@ -229,7 +229,7 @@ class PropagatorCommon:
 class PropagatorSymmetric(PropagatorCommon):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
-    described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
+    described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
 
     Contains methods to:
     - setup QDHT for TST;
@@ -302,9 +302,6 @@ class PropagatorSymmetric(PropagatorCommon):
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
         self.TM = bcknd.send_to_device(self.TM, dtype)
-
-        self.TST_compiled = False
-        self.iTST_compiled = False
 
         self.shape_trns_new = (self.Nr_new,)
         self.u_loc = bcknd.zeros(self.Nr, dtype)
