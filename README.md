@@ -94,4 +94,4 @@ backends have specific dependencies:
 - `CL`: [pyopencl](https://documen.tician.de/pyopencl) and [reikna](https://github.com/fjarri/reikna)
 - `AF`:  [ArrayFire](https://arrayfire.com) and [arrayfire-python](https://github.com/arrayfire/arrayfire-python)
 
-Optional enhancements of utilities are acheieved if [Numba](https://numba.pydata.org) is installed.
+Optional enhancements of utilities are achieved if [Numba](https://numba.pydata.org) is installed.
