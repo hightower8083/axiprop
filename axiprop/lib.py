@@ -176,7 +176,7 @@ class PropagatorCommon:
         for ikz in range(self.Nkz):
             self.u_loc = bcknd.send_to_device(u[ikz,:])
             self.TST()
-            self.u_ht *= bcknd.exp(1j*dz \
+            self.u_ht *= bcknd.exp(-1j*dz \
                 * bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
             u_step[ikz] = bcknd.get(self.u_iht)
@@ -216,7 +216,7 @@ class PropagatorCommon:
             self.TST()
             ik_loc = bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
-                self.u_ht *= bcknd.exp(  1j * dz[i_step] * ik_loc )
+                self.u_ht *= bcknd.exp(-1j * dz[i_step] * ik_loc )
                 self.iTST()
                 u_steps[i_step, ikz, :] = bcknd.get(self.u_iht)
 

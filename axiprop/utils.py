@@ -46,7 +46,7 @@ def mirror_parabolic(f0, kz, r):
     """
     s_ax = r**2/4/f0
 
-    val = np.exp(-2j * s_ax[None,:] * \
+    val = np.exp(   2j * s_ax[None,:] * \
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 
@@ -62,5 +62,39 @@ def get_temporal_1d(u, u_t, t, kz, Nr_loc):
         FFT_factor = np.exp(-1j * kz * c * t[it])
         for ir in range(Nr_loc):
             u_t[it] += np.real(u[:,ir] * FFT_factor).sum()
+
+    return u_t
+
+@njit
+def get_temporal_slice2d(u, u_t, t, kz):
+    """
+    Resonstruct temporal-radial field distribution
+    """
+    Nkz, Nx, Ny = u.shape
+    Nt = t.size
+
+    assert u_t.shape[-1] == Nx
+
+    for it in prange(Nt):
+        FFT_factor = np.exp(1j * kz * c * t[it])
+        for ix in range(Nx):
+            u_t[it, ix] = np.real(u[:, ix, Ny//2-1] * FFT_factor).sum()
+    return u_t
+
+@njit
+def get_temporal_3d(u, t, kz):
+    """
+    Resonstruct temporal-radial field distribution
+    """
+    Nkz, Nx, Ny = u.shape
+    Nt = t.size
+
+    u_t = np.empty((Nt, Nx, Ny))
+
+    for it in prange(Nt):
+        FFT_factor = np.exp(1j * kz * c * t[it])
+        for ix in range(Nx):
+            for iy in range(Ny):
+                u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
 
     return u_t
