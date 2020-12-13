@@ -13,7 +13,7 @@ This file contains main backends of axiprop:
 - NumPy + PyFFTW
 """
 import numpy as np
-from scipy.linalg import pinv2
+from scipy.linalg import inv as scipy_inv
 
 BACKENDS = {}
 
@@ -32,12 +32,12 @@ class BACKEND_NP():
         return arr_in
 
     def pinv(self, M, dtype):
-        M = pinv2(M)
+        M = scipy_inv(M, overwrite_a=True)
         return M
 
     def make_matmul(self, matrix_in, vec_in, vec_out):
         def matmul(a, b, c):
-            c = np.dot(a, b)
+            c = np.dot(a, b, out=c)
             return c
 
         return matmul
