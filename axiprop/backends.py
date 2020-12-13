@@ -5,10 +5,12 @@
 Axiprop backends
 
 This file contains main backends of axiprop:
+- Numpy
 - PyOpenCL
 - CuPy
 - ArrayFire
-- PropagatorFFT2
+- NumPy + MKL
+- NumPy + PyFFTW
 """
 import numpy as np
 from scipy.linalg import pinv2
