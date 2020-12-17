@@ -58,11 +58,30 @@ def get_temporal_1d(u, u_t, t, kz, Nr_loc):
     Nkz, Nr = u.shape
     Nt = t.size
 
+    assert u_t.shape[-1] == Nr
+
     for it in prange(Nt):
-        FFT_factor = np.exp(-1j * kz * c * t[it])
+        FFT_factor = np.exp(1j * kz * c * t[it])
         for ir in range(Nr_loc):
             u_t[it] += np.real(u[:,ir] * FFT_factor).sum()
 
+    return u_t
+
+@njit
+def get_temporal_radial(u, u_t, t, kz):
+    """
+    Resonstruct temporal-radial field distribution
+    """
+    Nkz, Nr = u.shape
+    Nt = t.size
+
+    assert u_t.shape[-1] == Nr
+    assert u_t.shape[0] == Nt
+
+    for it in prange(Nt):
+        FFT_factor = np.exp(1j * kz * c * t[it])
+        for ir in range(Nr):
+            u_t[it, ir] = np.real(u[:, ir] * FFT_factor).sum()
     return u_t
 
 @njit
@@ -98,3 +117,51 @@ def get_temporal_3d(u, t, kz):
                 u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
 
     return u_t
+
+"""
+The following methods are taken from the WarpX examples
+https://github.com/ECP-WarpX/WarpX/tree/development/Examples/Modules/laser_injection_from_file
+and all rights belong to WarpX development group Copyright (c) 2018
+"""
+
+def write_file_unf(fname, x, y, t, E):
+    """ For a given filename fname, space coordinates x and y, time coordinate t
+    and field E, write a WarpX-compatible input binary file containing the
+    profile of the laser pulse. This function should be used in the case
+    of a uniform spatio-temporal mesh
+    """
+
+    with open(fname, 'wb') as file:
+        flag_unif = 1
+        file.write(flag_unif.to_bytes(1, byteorder='little'))
+        file.write((len(t)).to_bytes(4, byteorder='little', signed=False))
+        file.write((len(x)).to_bytes(4, byteorder='little', signed=False))
+        file.write((len(y)).to_bytes(4, byteorder='little', signed=False))
+        file.write(t[0].tobytes())
+        file.write(t[-1].tobytes())
+        file.write(x[0].tobytes())
+        file.write(x[-1].tobytes())
+        if len(y) == 1 :
+            file.write(y[0].tobytes())
+        else :
+            file.write(y[0].tobytes())
+            file.write(y[-1].tobytes())
+        file.write(E.tobytes())
+
+
+def write_file(fname, x, y, t, E):
+    """ For a given filename fname, space coordinates x and y, time coordinate t
+    and field E, write a WarpX-compatible input binary file containing the
+    profile of the laser pulse
+    """
+
+    with open(fname, 'wb') as file:
+        flag_unif = 0
+        file.write(flag_unif.to_bytes(1, byteorder='little'))
+        file.write((len(t)).to_bytes(4, byteorder='little', signed=False))
+        file.write((len(x)).to_bytes(4, byteorder='little', signed=False))
+        file.write((len(y)).to_bytes(4, byteorder='little', signed=False))
+        file.write(t.tobytes())
+        file.write(x.tobytes())
+        file.write(y.tobytes())
+        file.write(E.tobytes())
