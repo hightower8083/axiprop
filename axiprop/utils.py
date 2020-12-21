@@ -8,7 +8,8 @@ This file contains utility methods for Axiprop tool
 """
 import numpy as np
 from numba import njit, prange
-from scipy.constants import c
+from scipy.constants import c, e, m_e
+from scipy.interpolate import interp1d
 
 # try import numba and make dummy methods if it is not
 try:
@@ -117,6 +118,54 @@ def get_temporal_3d(u, t, kz):
                 u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
 
     return u_t
+
+
+
+#### FBPIC profile
+@njit
+def get_E_r(t, u, kz):
+    FFT_factor = (np.exp(1j * kz * c * t) * np.ones_like(u).T).T
+    u_r = np.real(u * FFT_factor).sum(0) / FFT_factor.size
+    return u_r
+
+
+class LaserProfile( object ):
+
+    def __init__( self, propagation_direction, gpu_capable=False ):
+        assert propagation_direction in [-1, 1]
+        self.propag_direction = float(propagation_direction)
+        self.gpu_capable = gpu_capable
+
+class AxipropLaser( LaserProfile ):
+
+    def __init__( self, a0, u, kz, r, time_offset=0.0,
+                  theta_pol=0., lambda0=0.8e-6 ):
+
+        LaserProfile.__init__(self, propagation_direction=1, gpu_capable=False)
+
+        k0 = 2*np.pi/lambda0
+        E0 = a0*m_e*c**2*k0/e
+
+        self.u = u
+        self.kz = kz
+        self.r = r
+        self.time_offset = time_offset
+
+        self.E0x = E0 * np.cos(theta_pol)
+        self.E0y = E0 * np.sin(theta_pol)
+
+    def E_field( self, x, y, z, t ):
+        u_r = get_E_r( t + self.time_offset, self.u, self.kz)
+        r_p = np.sqrt(x*x + y*y)
+        fu = interp1d(self.r, u_r,  kind='cubic',
+                      fill_value=0.0, bounds_error=False )
+        profile = fu(r_p)
+        Ex = self.E0x * profile
+        Ey = self.E0y * profile
+        return( Ex.real, Ey.real )
+
+
+######## WARPX [WIP]
 
 """
 The following methods are taken from the WarpX examples

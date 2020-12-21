@@ -97,7 +97,7 @@ try:
             return arr_out
 
         def pinv(self, M, dtype):
-            M = pinv2(M, check_finite=False)
+            M = scipy_inv(M, overwrite_a=True)
             M = self.send_to_device(M)
             return M
 
@@ -149,10 +149,17 @@ try:
             arr_out = self.cp.asarray(arr_in)
             return arr_out
 
+        """
         def pinv(self, M, dtype):
             M = self.send_to_device(M)
             M = self.cp.linalg.pinv(M)
-            # M = M.astype(dtype)
+            return M
+        """
+
+        def pinv(self, M, dtype):
+            M = scipy_inv(M, overwrite_a=True)
+            M = self.send_to_device(M)
+            M = M.astype(dtype)
             return M
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
