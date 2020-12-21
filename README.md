@@ -67,7 +67,7 @@ A_multi = prop.steps(A0, zsteps)
 
 Plot the results using your favorite tools 
 
-![example_image](https://github.com/hightower8083/axiprop/blob/main/examples/example_figure.jpg)
+![example_image](https://github.com/hightower8083/axiprop/blob/main/examples/example_figure.png)
 
 For more info checkout the example notebooks for [radial](https://github.com/hightower8083/axiprop/blob/main/examples/example.ipynb) and [cartesian](https://github.com/hightower8083/axiprop/blob/main/examples/test2d.ipynb) cases, and also look for methods documentation.
 
