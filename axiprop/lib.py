@@ -14,31 +14,14 @@ import numpy as np
 from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
 import os, sys
-from .backends import BACKENDS
+from .backends import AVAILABLE_BACKENDS
 
-if 'AXIPROP_BACKEND' in os.environ:
-    AXIPROP_BACKEND = os.environ['AXIPROP_BACKEND']
-    if AXIPROP_BACKEND in BACKENDS:
-        bcknd = BACKENDS[AXIPROP_BACKEND]()
-    else:
-        print(AXIPROP_BACKEND+' backend is not available')
-        sys.exit(0)
-elif 'CU' in BACKENDS:
-    bcknd = BACKENDS['CU']()
-elif 'CL' in BACKENDS:
-    bcknd = BACKENDS['CL']()
-elif 'AF' in BACKENDS:
-    bcknd = BACKENDS['AF']()
-elif 'NP_MKL' in BACKENDS:
-    bcknd = BACKENDS['NP_MKL']()
-elif 'NP_FFTW' in BACKENDS:
-    bcknd = BACKENDS['NP_FFTW']()
-elif 'NP' in BACKENDS:
-    bcknd = BACKENDS['NP']()
+backend_strings_ordered = ['CU', 'CL', 'AF', 'NP_MKL', 'NP_FFTW', 'NP']
 
 class PropagatorCommon:
     """
     Base class for propagators. Contains methods to:
+    - initialize the backend;
     - setup spectral `kz` grid;
     - setup radial `r` and spectral `kr` grids;
     - setup transverse `x`-`y`, and spectral `kx`-`ky` grids;
@@ -48,6 +31,27 @@ class PropagatorCommon:
     This class should to be used to derive the actual Propagators
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
+
+    def init_backend(self, backend):
+
+        print('Available backends are: ' \
+            + ', '.join(AVAILABLE_BACKENDS.keys()))
+
+        if backend is not None:
+            backend_string = backend
+        elif 'AXIPROP_BACKEND' in os.environ:
+            backend_string = os.environ['AXIPROP_BACKEND']
+        else:
+            for bknd_str in backend_strings_ordered:
+                if bknd_str in AVAILABLE_BACKENDS:
+                    backend_string = bknd_str
+                    break
+
+        if backend_string not in AVAILABLE_BACKENDS:
+            raise Exception(f'Backend {backend_string} is not available')
+
+        self.bcknd = AVAILABLE_BACKENDS[backend_string]()
+        print(f'{self.bcknd.name} is chosen')
 
     def init_kz(self, Lkz, Nkz, k0):
         """
@@ -98,7 +102,7 @@ class PropagatorCommon:
         alpha = alpha[:-1]
 
         self.r = Rmax * alpha / alpha_np1
-        self.kr = bcknd.send_to_device(alpha/Rmax)
+        self.kr = self.bcknd.to_device(alpha/Rmax)
 
     def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
         """
@@ -149,7 +153,7 @@ class PropagatorCommon:
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
         self.Nr = self.r.size
-        self.kr = bcknd.send_to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
+        self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
     def step(self, u, dz):
         """
@@ -174,12 +178,12 @@ class PropagatorCommon:
                           dtype=u.dtype)
 
         for ikz in range(self.Nkz):
-            self.u_loc = bcknd.send_to_device(u[ikz,:])
+            self.u_loc = self.bcknd.to_device(u[ikz,:])
             self.TST()
-            self.u_ht *= bcknd.exp(-1j*dz \
-                * bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2 )))
+            self.u_ht *= self.bcknd.exp(-1j*dz \
+                * self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2 )))
             self.iTST()
-            u_step[ikz] = bcknd.get(self.u_iht)
+            u_step[ikz] = self.bcknd.to_host(self.u_iht)
 
         return u_step
 
@@ -212,13 +216,13 @@ class PropagatorCommon:
             print('Propagating the wave:')
 
         for ikz in range(self.Nkz):
-            self.u_loc = bcknd.send_to_device(u[ikz])
+            self.u_loc = self.bcknd.to_device(u[ikz])
             self.TST()
-            ik_loc = bcknd.sqrt(bcknd.abs(self.kz[ikz]**2 - self.kr**2))
+            ik_loc = self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2))
             for i_step in range(Nsteps):
-                self.u_ht *= bcknd.exp(-1j * dz[i_step] * ik_loc )
+                self.u_ht *= self.bcknd.exp(-1j * dz[i_step] * ik_loc )
                 self.iTST()
-                u_steps[i_step, ikz, :] = bcknd.get(self.u_iht)
+                u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
 
                 if verbose:
                     print(f"Done step {i_step} of {Nsteps} "+ \
@@ -241,7 +245,8 @@ class PropagatorSymmetric(PropagatorCommon):
     """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
-                 Nr_new=None, dtype=np.complex):
+                 Nr_new=None, dtype=np.complex,
+                 backend=None):
         """
         Construct the propagator.
 
@@ -269,7 +274,12 @@ class PropagatorSymmetric(PropagatorCommon):
 
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
+
+        backend: string
+            Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
+            list of available options.
         """
+        self.init_backend(backend)
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_jroot_both(Rmax, Nr, dtype)
         self.init_TST(Nr_new)
@@ -297,19 +307,19 @@ class PropagatorSymmetric(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self._j = bcknd.send_to_device((np.abs(j1(alpha)) / Rmax))
+        self._j = self.bcknd.to_device((np.abs(j1(alpha)) / Rmax))
 
         denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
-        self.TM = bcknd.send_to_device(self.TM, dtype)
+        self.TM = self.bcknd.to_device(self.TM, dtype)
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = bcknd.zeros(self.Nr, dtype)
-        self.u_ht = bcknd.zeros(self.Nr, dtype)
-        self.u_iht = bcknd.zeros(self.Nr_new, dtype)
+        self.u_loc = self.bcknd.zeros(self.Nr, dtype)
+        self.u_ht = self.bcknd.zeros(self.Nr, dtype)
+        self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
 
-        self.TST_matmul = bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
-        self.iTST_matmul = bcknd.make_matmul(self.TM[:self.Nr_new],
+        self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = self.bcknd.make_matmul(self.TM[:self.Nr_new],
                                            self.u_ht, self.u_iht)
 
     def TST(self):
@@ -342,7 +352,8 @@ class PropagatorResampling(PropagatorCommon):
     """
 
     def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
-                 Rmax_new=None, Nr_new=None, dtype=np.complex):
+                 Rmax_new=None, Nr_new=None,
+                 dtype=np.complex, backend=None):
         """
         Construct the propagator.
 
@@ -374,7 +385,12 @@ class PropagatorResampling(PropagatorCommon):
 
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
+
+        backend: string
+            Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
+            list of available options.
         """
+        self.init_backend(backend)
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_jroot_both(Rmax, Nr, dtype)
         self.init_TST(Rmax_new, Nr_new)
@@ -410,23 +426,23 @@ class PropagatorResampling(PropagatorCommon):
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        kr = bcknd.get(self.kr)
+        kr = self.bcknd.to_host(self.kr)
 
         self.TM = j0(self.r[:,None] * kr[None,:])
-        self.TM = bcknd.pinv(self.TM, dtype)
+        self.TM = self.bcknd.inv(self.TM, dtype)
 
-        self.invTM = bcknd.send_to_device(\
+        self.invTM = self.bcknd.to_device(\
             j0(self.r_new[:,None]*kr[None,:]), dtype)
 
         self.shape_trns_new = (self.Nr_new,)
 
         self.shape_trns_new = (self.Nr_new,)
-        self.u_loc = bcknd.zeros(self.Nr, dtype)
-        self.u_ht = bcknd.zeros(self.Nr, dtype)
-        self.u_iht = bcknd.zeros(self.Nr_new, dtype)
+        self.u_loc = self.bcknd.zeros(self.Nr, dtype)
+        self.u_ht = self.bcknd.zeros(self.Nr, dtype)
+        self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
 
-        self.TST_matmul = bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
-        self.iTST_matmul = bcknd.make_matmul(self.invTM, self.u_ht, self.u_iht)
+        self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
+        self.iTST_matmul = self.bcknd.make_matmul(self.invTM, self.u_ht, self.u_iht)
 
     def TST(self):
         """
@@ -453,7 +469,8 @@ class PropagatorFFT2(PropagatorCommon):
     """
 
     def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
-                 Rmax_new=None, Nr_new=None, dtype=np.complex):
+                 Rmax_new=None, Nr_new=None,
+                 dtype=np.complex, backend=None):
         """
         Construct the propagator.
 
@@ -483,7 +500,12 @@ class PropagatorFFT2(PropagatorCommon):
 
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
+
+        backend: string
+            Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
+            list of available options.
         """
+        self.init_backend(backend)
         self.init_kz(Lkz, Nkz, k0)
         self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
         self.init_TST()
@@ -501,11 +523,11 @@ class PropagatorFFT2(PropagatorCommon):
 
         self.shape_trns_new = (Nx, Ny)
 
-        self.u_loc = bcknd.zeros((Nx, Ny), dtype)
-        self.u_ht = bcknd.zeros((Nx, Ny), dtype)
-        self.u_iht = bcknd.zeros((Nx, Ny), dtype)
+        self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)
+        self.u_ht = self.bcknd.zeros((Nx, Ny), dtype)
+        self.u_iht = self.bcknd.zeros((Nx, Ny), dtype)
 
-        self.fft2, self.ifft2 = bcknd.make_fft(self.u_loc, self.u_ht, self.u_iht)
+        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_loc, self.u_ht, self.u_iht)
 
     def TST(self):
         """
