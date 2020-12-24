@@ -76,7 +76,7 @@ try:
         thrd = api.Thread(cqd=queue)
 
         def to_host(self, arr_in):
-            arr_out = arr_in.to_host()
+            arr_out = arr_in.get()
             return arr_out
 
         def to_device(self, arr_in, dtype=None):

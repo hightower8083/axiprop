@@ -16,7 +16,7 @@ from scipy.special import j0, j1, jn_zeros
 import os, sys
 from .backends import AVAILABLE_BACKENDS
 
-backend_strings_ordered = ['CU', 'CL', 'AF', 'NP_MKL', 'NP_FFTW', 'NP']
+backend_strings_ordered = ['CU', 'AF', 'CL', 'NP_MKL', 'NP_FFTW', 'NP']
 
 class PropagatorCommon:
     """
