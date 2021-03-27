@@ -155,7 +155,7 @@ class PropagatorCommon:
         self.Nr = self.r.size
         self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
-    def step(self, u, dz):
+    def step(self, u, dz, overwrite=False):
         """
         Propagate wave `u` over the distance `dz`.
 
@@ -174,14 +174,23 @@ class PropagatorCommon:
         """
         assert u.dtype == self.dtype
 
-        u_step = np.empty((self.Nkz, *self.shape_trns_new),
-                          dtype=u.dtype)
+        if not overwrite:
+            u_step = np.empty((self.Nkz, *self.shape_trns_new),
+                              dtype=u.dtype)
+        else:
+            u_step = u
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
             self.TST()
-            self.u_ht *= self.bcknd.exp(-1j*dz \
-                * self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2 )))
+
+            phase_loc = self.kz[ikz]**2 - self.kr**2
+            phase_loc = self.bcknd.sqrt( (phase_loc>=0.)*phase_loc )
+            self.u_ht *= self.bcknd.exp( -1j * dz * phase_loc )
+
+#            self.u_ht *= self.bcknd.exp(-1j*dz \
+#      * self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2 )) )
+
             self.iTST()
             u_step[ikz] = self.bcknd.to_host(self.u_iht)
 
@@ -393,6 +402,7 @@ class PropagatorResampling(PropagatorCommon):
         self.init_backend(backend)
         self.init_kz(Lkz, Nkz, k0)
         self.init_rkr_jroot_both(Rmax, Nr, dtype)
+
         self.init_TST(Rmax_new, Nr_new)
 
     def init_TST(self, Rmax_new, Nr_new):
