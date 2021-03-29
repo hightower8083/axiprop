@@ -163,7 +163,7 @@ class PropagatorCommon:
         self.Nr = self.r.size
         self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
-    def step(self, u, dz, overwrite=True, show_progress=False):
+    def step(self, u, dz, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
 
