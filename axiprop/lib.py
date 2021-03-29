@@ -16,6 +16,14 @@ from scipy.special import j0, j1, jn_zeros
 import os, sys
 from .backends import AVAILABLE_BACKENDS
 
+try:
+    from tqdm import tqdm
+    tqdm_available = True
+    bar_format='{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
+except Exception:
+    tqdm_available = False
+
+
 backend_strings_ordered = ['CU', 'AF', 'CL', 'NP_MKL', 'NP_FFTW', 'NP']
 
 class PropagatorCommon:
@@ -155,7 +163,7 @@ class PropagatorCommon:
         self.Nr = self.r.size
         self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
-    def step(self, u, dz, overwrite=False):
+    def step(self, u, dz, overwrite=True, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
 
@@ -180,6 +188,9 @@ class PropagatorCommon:
         else:
             u_step = u
 
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz, bar_format=bar_format)
+
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
             self.TST()
@@ -188,15 +199,17 @@ class PropagatorCommon:
             phase_loc = self.bcknd.sqrt( (phase_loc>=0.)*phase_loc )
             self.u_ht *= self.bcknd.exp( -1j * dz * phase_loc )
 
-#            self.u_ht *= self.bcknd.exp(-1j*dz \
-#      * self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2 )) )
-
             self.iTST()
             u_step[ikz] = self.bcknd.to_host(self.u_iht)
+            if tqdm_available and show_progress:
+                pbar.update(1)
+
+        if tqdm_available and show_progress:
+            pbar.close()
 
         return u_step
 
-    def steps(self, u, dz, verbose=True):
+    def steps(self, u, dz, show_progress=True):
         """
         Propagate wave `u` over the multiple steps.
 
@@ -221,22 +234,29 @@ class PropagatorCommon:
         u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
                          dtype=u.dtype)
 
-        if verbose:
-            print('Propagating the wave:')
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz])
             self.TST()
-            ik_loc = self.bcknd.sqrt(self.bcknd.abs(self.kz[ikz]**2 - self.kr**2))
+            ik_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
+                                                     self.kr**2 ))
             for i_step in range(Nsteps):
                 self.u_ht *= self.bcknd.exp(-1j * dz[i_step] * ik_loc )
                 self.iTST()
                 u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
 
-                if verbose:
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
                     print(f"Done step {i_step} of {Nsteps} "+ \
                           f"for wavelength {ikz+1} of {self.Nkz}",
                           end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
         return u_steps
 
 class PropagatorSymmetric(PropagatorCommon):
