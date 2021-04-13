@@ -7,7 +7,6 @@ Axiprop utils file
 This file contains utility methods for Axiprop tool
 """
 import numpy as np
-from numba import njit, prange
 from scipy.constants import c, e, m_e
 from scipy.interpolate import interp1d
 
