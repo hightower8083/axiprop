@@ -52,19 +52,16 @@ def mirror_parabolic(f0, kz, r):
     return val
 
 @njit
-def get_temporal_1d(u, u_t, t, kz, Nr_loc):
+def get_temporal_1d(u, u_t, t, kz):
     """
-    Resonstruct temporal-radial field distribution
+    Resonstruct temporal field distribution
     """
-    Nkz, Nr = u.shape
+    Nkz = u.shape
     Nt = t.size
-
-    assert u_t.shape[-1] == Nr
 
     for it in prange(Nt):
         FFT_factor = np.exp(1j * kz * c * t[it])
-        for ir in range(Nr_loc):
-            u_t[it] += np.real(u[:,ir] * FFT_factor).sum()
+        u_t[it] = np.real(u * FFT_factor).sum()
 
     return u_t
 
@@ -124,8 +121,9 @@ def get_temporal_3d(u, t, kz):
 #### FBPIC profile
 @njit
 def get_E_r(t, u, kz):
+    #  print(t, u, kz)
     FFT_factor = (np.exp(1j * kz * c * t) * np.ones_like(u).T).T
-    u_r = np.real(u * FFT_factor).sum(0) / FFT_factor.size
+    u_r = np.real(u * FFT_factor).sum(0) # / FFT_factor.size
     return u_r
 
 
@@ -138,23 +136,27 @@ class LaserProfile( object ):
 
 class AxipropLaser( LaserProfile ):
 
-    def __init__( self, a0, u, kz, r, time_offset=0.0,
+    def __init__( self, a0, u, kz, r, time_offset=0.0, z0=0.0,
                   theta_pol=0., lambda0=0.8e-6 ):
 
         LaserProfile.__init__(self, propagation_direction=1, gpu_capable=False)
 
         k0 = 2*np.pi/lambda0
-        E0 = a0*m_e*c**2*k0/e
+        if a0 is not None:
+            E0 = a0*m_e*c**2*k0/e
+        else:
+            E0 = 1.
 
         self.u = u
         self.kz = kz
         self.r = r
         self.time_offset = time_offset
+        self.z0 = z0
 
         self.E0x = E0 * np.cos(theta_pol)
         self.E0y = E0 * np.sin(theta_pol)
 
-    def E_field( self, x, y, z, t ):
+    def E_field_antenna( self, x, y, z, t ):
         u_r = get_E_r( t + self.time_offset, self.u, self.kz)
         r_p = np.sqrt(x*x + y*y)
         fu = interp1d(self.r, u_r,  kind='cubic',
@@ -162,6 +164,27 @@ class AxipropLaser( LaserProfile ):
         profile = fu(r_p)
         Ex = self.E0x * profile
         Ey = self.E0y * profile
+        return( Ex.real, Ey.real )
+
+    def E_field( self, x, y, z, t ):
+
+        Ex = np.zeros_like(x)
+        Ey = np.zeros_like(x)
+        for iz in range(x.shape[0]):
+            x_p, y_p, z_p = x[iz], y[iz], z[iz]
+            z_p0 = z_p[0,0]
+            u_r = get_E_r( -z_p0/c + self.z0/c + self.time_offset, self.u, self.kz)
+            fu = interp1d(self.r, u_r,  kind='cubic',
+                      fill_value=0.0, bounds_error=False )
+
+            r_p = np.sqrt(x_p*x_p + y_p*y_p)
+
+            prof_p = fu(r_p)
+
+            Ex[iz] = self.E0x * prof_p
+            Ey[iz] = self.E0x * prof_p
+
+
         return( Ex.real, Ey.real )
 
 
