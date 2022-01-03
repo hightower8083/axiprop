@@ -259,6 +259,58 @@ class PropagatorCommon:
 
         return u_steps
 
+    def initiate_stepping(self, u):
+        """
+        Initiate the stepped propagation mode. This mode allows computation
+        of the consequent steps with access to the result on each step.
+        In contrast to `step` can operate the `PropagatorResampling` class.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to be propagated.
+        """
+        assert u.dtype == self.dtype
+
+        self.stepping_image = self.bcknd.to_device( np.zeros_like(u) )
+        self.phase_loc = self.bcknd.to_device( np.zeros_like(u) )
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz,:])
+            self.TST()
+
+            self.stepping_image[ikz] = self.u_ht.copy()
+
+            phase_loc = self.kz[ikz]**2 - self.kr**2
+            self.phase_loc[ikz] = self.bcknd.sqrt((phase_loc >= 0.)*phase_loc)
+
+    def stepping(self, dz, u_out=None):
+        """
+        Perform a step in the stepped propagation mode. This mode allows computation
+        of the consequent steps with access to the result on each step.
+        In contrast to `step` can operate the `PropagatorResampling` class.
+
+        Parameters
+        ----------
+        dz: float (m)
+            Step over which wave should be propagated.
+
+        u_out: 2darray of complex or double (optional)
+            Array to which data should be written.
+            If not provided will be allocated.
+        """
+        if u_out is None:
+            u_out = np.empty((self.Nkz, *self.shape_trns_new),
+                              dtype=self.dtype)
+
+        for ikz in range(self.Nkz):
+            self.stepping_image[ikz] *= self.bcknd.exp( -1j * dz * self.phase_loc[ikz] )
+            self.u_ht = self.stepping_image[ikz].copy()
+            self.iTST()
+            u_out[ikz] = self.bcknd.to_host(self.u_iht)
+
+        return u_out
+
 class PropagatorSymmetric(PropagatorCommon):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
@@ -342,7 +394,9 @@ class PropagatorSymmetric(PropagatorCommon):
         self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
         self.TM = self.bcknd.to_device(self.TM, dtype)
 
-        self.shape_trns_new = (self.Nr_new,)
+        self.shape_trns = (self.Nr, )
+        self.shape_trns_new = (self.Nr_new, )
+
         self.u_loc = self.bcknd.zeros(self.Nr, dtype)
         self.u_ht = self.bcknd.zeros(self.Nr, dtype)
         self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
@@ -464,9 +518,9 @@ class PropagatorResampling(PropagatorCommon):
         self.invTM = self.bcknd.to_device(\
             j0(self.r_new[:,None]*kr[None,:]), dtype)
 
-        self.shape_trns_new = (self.Nr_new,)
+        self.shape_trns = (self.Nr, )
+        self.shape_trns_new = (self.Nr_new, )
 
-        self.shape_trns_new = (self.Nr_new,)
         self.u_loc = self.bcknd.zeros(self.Nr, dtype)
         self.u_ht = self.bcknd.zeros(self.Nr, dtype)
         self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
@@ -551,6 +605,7 @@ class PropagatorFFT2(PropagatorCommon):
 
         dtype = self.dtype
 
+        self.shape_trns = (Nx, Ny)
         self.shape_trns_new = (Nx, Ny)
 
         self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)

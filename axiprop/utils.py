@@ -1,4 +1,4 @@
-# Copyright 2020
+7# Copyright 2020
 # Authors: Igor Andriyash
 # License: GNU GPL v3
 """
@@ -135,16 +135,10 @@ class LaserProfile( object ):
 
 class AxipropLaser( LaserProfile ):
 
-    def __init__( self, a0, u, kz, r, time_offset=0.0, z0=0.0,
+    def __init__( self, E0, u, kz, r, time_offset=0.0, z0=0.0,
                   theta_pol=0., lambda0=0.8e-6 ):
 
         LaserProfile.__init__(self, propagation_direction=1, gpu_capable=False)
-
-        k0 = 2*np.pi/lambda0
-        if a0 is not None:
-            E0 = a0*m_e*c**2*k0/e
-        else:
-            E0 = 1.
 
         self.u = u
         self.kz = kz
@@ -181,7 +175,7 @@ class AxipropLaser( LaserProfile ):
             prof_p = fu(r_p)
 
             Ex[iz] = self.E0x * prof_p
-            Ey[iz] = self.E0x * prof_p
+            Ey[iz] = self.E0y * prof_p
 
 
         return( Ex.real, Ey.real )
