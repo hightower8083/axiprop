@@ -46,7 +46,7 @@ def mirror_parabolic(f0, kz, r):
     """
     s_ax = r**2/4/f0
 
-    val = np.exp(   2j * s_ax[None,:] * \
+    val = np.exp(   -2j * s_ax[None,:] * \
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 
@@ -59,7 +59,7 @@ def get_temporal_1d(u, u_t, t, kz):
     Nt = t.size
 
     for it in prange(Nt):
-        FFT_factor = np.exp(1j * kz * c * t[it])
+        FFT_factor = np.exp(-1j * kz * c * t[it])
         u_t[it] = np.real(u * FFT_factor).sum()
 
     return u_t
@@ -76,7 +76,7 @@ def get_temporal_radial(u, u_t, t, kz):
     assert u_t.shape[0] == Nt
 
     for it in prange(Nt):
-        FFT_factor = np.exp(1j * kz * c * t[it])
+        FFT_factor = np.exp(-1j * kz * c * t[it])
         for ir in range(Nr):
             u_t[it, ir] = np.real(u[:, ir] * FFT_factor).sum()
     return u_t
@@ -92,7 +92,7 @@ def get_temporal_slice2d(u, u_t, t, kz):
     assert u_t.shape[-1] == Nx
 
     for it in prange(Nt):
-        FFT_factor = np.exp(1j * kz * c * t[it])
+        FFT_factor = np.exp(-1j * kz * c * t[it])
         for ix in range(Nx):
             u_t[it, ix] = np.real(u[:, ix, Ny//2-1] * FFT_factor).sum()
     return u_t
@@ -121,7 +121,7 @@ def get_temporal_3d(u, t, kz):
 @njit
 def get_E_r(t, u, kz):
     #  print(t, u, kz)
-    FFT_factor = (np.exp(1j * kz * c * t) * np.ones_like(u).T).T
+    FFT_factor = (np.exp(-1j * kz * c * t) * np.ones_like(u).T).T
     u_r = np.real(u * FFT_factor).sum(0) # / FFT_factor.size
     return u_r
 
@@ -166,7 +166,8 @@ class AxipropLaser( LaserProfile ):
         for iz in range(x.shape[0]):
             x_p, y_p, z_p = x[iz], y[iz], z[iz]
             z_p0 = z_p[0,0]
-            u_r = get_E_r( -z_p0/c + self.z0/c + self.time_offset, self.u, self.kz)
+            u_r = get_E_r( -z_p0/c + self.z0/c + self.time_offset,
+                            self.u, self.kz)
             fu = interp1d(self.r, u_r,  kind='cubic',
                       fill_value=0.0, bounds_error=False )
 

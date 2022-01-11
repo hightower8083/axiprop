@@ -197,7 +197,7 @@ class PropagatorCommon:
 
             phase_loc = self.kz[ikz]**2 - self.kr**2
             phase_loc = self.bcknd.sqrt( (phase_loc>=0.)*phase_loc )
-            self.u_ht *= self.bcknd.exp( -1j * dz * phase_loc )
+            self.u_ht *= self.bcknd.exp( 1j * dz * phase_loc )
 
             self.iTST()
             u_step[ikz] = self.bcknd.to_host(self.u_iht)
@@ -243,7 +243,7 @@ class PropagatorCommon:
             ik_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
                                                      self.kr**2 ))
             for i_step in range(Nsteps):
-                self.u_ht *= self.bcknd.exp(-1j * dz[i_step] * ik_loc )
+                self.u_ht *= self.bcknd.exp(1j * dz[i_step] * ik_loc )
                 self.iTST()
                 u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
 
@@ -274,6 +274,7 @@ class PropagatorCommon:
 
         self.stepping_image = self.bcknd.to_device( np.zeros_like(u) )
         self.phase_loc = self.bcknd.to_device( np.zeros_like(u) )
+        self.z_propagation = 0.0
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
@@ -304,11 +305,13 @@ class PropagatorCommon:
                               dtype=self.dtype)
 
         for ikz in range(self.Nkz):
-            self.stepping_image[ikz] *= self.bcknd.exp( -1j * dz * self.phase_loc[ikz] )
+            self.stepping_image[ikz] *= self.bcknd.exp( \
+                1j * dz * self.phase_loc[ikz] )
             self.u_ht = self.stepping_image[ikz].copy()
             self.iTST()
             u_out[ikz] = self.bcknd.to_host(self.u_iht)
 
+        self.z_propagation += dz
         return u_out
 
 class PropagatorSymmetric(PropagatorCommon):
