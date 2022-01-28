@@ -44,11 +44,11 @@ f0 = 2 * R_las * f_N          # focal length
 
 Define the propagator,
 ```python
-prop = PropagatorSymmetric(Rmax, L_kz, Nr, Nkz, k0,  Nr_end)
+prop = PropagatorSymmetric((Rmax, Nr), (k0, L_kz, Nkz), Nr_end)
 ```
 and setup the laser reflected from the focusing mirror
 ```python
-A0 = laser_from_fu( fu_laser, prop.kz, prop.r, normalize=True )
+A0 = laser_from_fu( fu_laser, prop.kz, prop.r )
 A0 = A0 * mirror_parabolic( f0, prop.kz, prop.r )
 ```
 

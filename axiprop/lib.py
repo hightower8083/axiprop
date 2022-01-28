@@ -61,82 +61,98 @@ class PropagatorCommon:
         self.bcknd = AVAILABLE_BACKENDS[backend_string]()
         print(f'{self.bcknd.name} is chosen')
 
-    def init_kz(self, Lkz, Nkz, k0):
+    def init_kz(self, kz_axis):
         """
         Setup `kz` spectral grid.
 
         Parameters
         ----------
-        Lkz: float (1/m)
-            Total spectral width in units of wavenumbers.
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
 
-        Nkz: int
-            Number of spectral modes (wavenumbers) to resolve the temporal
-            profile of the wave.
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
 
-        k0: float (1/m)
-            Central wavenumber of the spectral domain.
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
         """
 
-        self.dtype = np.complex
+        self.dtype = np.complex128
 
-        Nkz_2 = int(np.ceil(Nkz/2))
-        half_ax = np.linspace(0, 1., Nkz_2)
-        full_ax = np.r_[-half_ax[1:][::-1], half_ax]
-        self.Nkz = full_ax.size
-        self.kz = k0 + Lkz / 2 * full_ax
+        if type(kz_axis) is tuple:
+            k0, Lkz, Nkz = kz_axis
+            Nkz_2 = int(np.ceil(Nkz/2))
+            half_ax = np.linspace(0, 1., Nkz_2)
+            full_ax = np.r_[-half_ax[1:][::-1], half_ax]
+            self.Nkz = full_ax.size
+            self.kz = k0 + Lkz / 2 * full_ax
+        else:
+            self.kz = kz_axis.copy()
+            self.Nkz = self.kz.size
 
-    def init_rkr_jroot_both(self, Rmax, Nr, dtype):
+    def init_rkr_jroot_both(self, r_axis, dtype):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
         Parameters
         ----------
-        Rmax: float (m)
-            Radial size of the calculation domain.
+        r_axis: tuple (Rmax, Nr)
+          Here:
+            Rmax: float (m)
+                Radial size of the calculation domain.
 
-        Nr: int
-            Number of nodes of the radial grid.
+            Nr: int
+                Number of nodes of the radial grid.
 
         dtype: type
             Data type to be used.
         """
-        self.Rmax = Rmax
-        self.Nr = Nr
+        self.Rmax, self.Nr = r_axis
         self.dtype = dtype
 
-        alpha = jn_zeros(0, Nr+1)
+        alpha = jn_zeros(0, self.Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self.r = Rmax * alpha / alpha_np1
-        self.kr = self.bcknd.to_device(alpha/Rmax)
+        self.r = self.Rmax * alpha / alpha_np1
+        self.kr = self.bcknd.to_device(alpha/self.Rmax)
 
-    def init_xykxy_fft2(self, Lx, Ly, Nx, Ny, dtype):
+    def init_xykxy_fft2(self, x_axis, y_axis, dtype):
         """
         Setup the transverse `x` and `y` and corresponding spectral
         `kx` and `ky` grids, and fix data type.
 
         Parameters
         ----------
-        Lx: float (m)
-            Full size of the calculation domain along x-axis.
+        x_axis: tuple (Lx, Nx)
+          Define the x-axis grid with parameters:
+            Lx: float (m)
+                Full size of the calculation domain along x-axis.
 
-        Ly: float (m)
-            Full size of the calculation domain along y-axis.
+            Nx: int
+                Number of nodes of the x-grid. Better be an odd number,
+                in order to make a symmteric grid.
 
-        Nx: int
-            Number of nodes of the x-grid. Better be an odd number,
-            in order to make a symmteric grid.
+        y_axis: tuple (Ly, Ny)
+          Define the y-axis grid with parameters:
+            Ly: float (m)
+                Full size of the calculation domain along y-axis.
 
-        Ny: int
-            Number of nodes of the y-grid.Better be an odd number,
-            in order to make a symmteric grid.
+            Ny: int
+                Number of nodes of the y-grid.Better be an odd number,
+                in order to make a symmteric grid.
 
         dtype: type
             Data type to be used.
         """
         self.dtype = dtype
+
+        Lx, Nx = x_axis
+        Ly, Ny = y_axis
 
         self.Lx = Lx
         self.Ly = Ly
@@ -328,29 +344,35 @@ class PropagatorSymmetric(PropagatorCommon):
     The inverse transform can be truncated to a smaller radial size (same grid).
     """
 
-    def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
-                 Nr_new=None, dtype=np.complex,
+    def __init__(self, r_axis, kz_axis,
+                 Nr_new=None, dtype=np.complex128,
                  backend=None):
         """
         Construct the propagator.
 
         Parameters
         ----------
-        Rmax: float (m)
-            Radial size of the calculation domain.
+        r_axis: tuple (Rmax, Nr)
+          Here:
+            Rmax: float (m)
+                Radial size of the calculation domain.
 
-        Lkz: float (1/m)
-            Total spectral width in units of wavenumbers.
+            Nr: int
+                Number of nodes of the radial grid.
 
-        Nr: int
-            Number of nodes of the radial grid.
 
-        Nkz: int
-            Number of spectral modes (wavenumbers) to resolve the temporal
-            profile of the wave.
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
 
-        k0: float (1/m)
-            Central wavenumber of the spectral domain.
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
+
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
 
         Nr_new: int (optional)
             New number of nodes of the trancated radial grid. If not defined
@@ -364,8 +386,8 @@ class PropagatorSymmetric(PropagatorCommon):
             list of available options.
         """
         self.init_backend(backend)
-        self.init_kz(Lkz, Nkz, k0)
-        self.init_rkr_jroot_both(Rmax, Nr, dtype)
+        self.init_kz(kz_axis)
+        self.init_rkr_jroot_both(r_axis, dtype)
         self.init_TST(Nr_new)
 
     def init_TST(self, Nr_new):
@@ -437,7 +459,7 @@ class PropagatorResampling(PropagatorCommon):
     This method samples output field on an arbitrary uniform radial grid.
     """
 
-    def __init__(self, Rmax, Lkz, Nr, Nkz, k0,
+    def __init__(self, r_axis, kz_axis,
                  Rmax_new=None, Nr_new=None,
                  dtype=np.complex, backend=None):
         """
@@ -445,21 +467,27 @@ class PropagatorResampling(PropagatorCommon):
 
         Parameters
         ----------
-        Rmax: float (m)
-            Radial size of the calculation domain.
+        r_axis: tuple (Rmax, Nr)
+          Here:
+            Rmax: float (m)
+                Radial size of the calculation domain.
 
-        Lkz: float (1/m)
-            Total spectral width in units of wavenumbers.
+            Nr: int
+                Number of nodes of the radial grid.
 
-        Nr: int
-            Number of nodes of the radial grid.
 
-        Nkz: int
-            Number of spectral modes (wavenumbers) to resolve the temporal
-            profile of the wave.
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
 
-        k0: float (1/m)
-            Central wavenumber of the spectral domain.
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
+
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
 
         Rmax_new: float (m) (optional)
             New radial size for the output calculation domain. If not defined
@@ -477,8 +505,8 @@ class PropagatorResampling(PropagatorCommon):
             list of available options.
         """
         self.init_backend(backend)
-        self.init_kz(Lkz, Nkz, k0)
-        self.init_rkr_jroot_both(Rmax, Nr, dtype)
+        self.init_kz(kz_axis)
+        self.init_rkr_jroot_both(r_axis, dtype)
 
         self.init_TST(Rmax_new, Nr_new)
 
@@ -555,7 +583,7 @@ class PropagatorFFT2(PropagatorCommon):
     - perform a inverse FFT;
     """
 
-    def __init__(self, Lx, Ly, Lkz, Nx, Ny, Nkz, k0,
+    def __init__(self, x_axis, y_axis, kz_axis,
                  Rmax_new=None, Nr_new=None,
                  dtype=np.complex, backend=None):
         """
@@ -563,27 +591,36 @@ class PropagatorFFT2(PropagatorCommon):
 
         Parameters
         ----------
-        Lx: float (m)
-            Full size of the calculation domain along x-axis.
+        x_axis: tuple (Lx, Nx)
+          Define the x-axis grid with parameters:
+            Lx: float (m)
+                Full size of the calculation domain along x-axis.
 
-        Ly: float (m)
-            Full size of the calculation domain along y-axis.
+            Nx: int
+                Number of nodes of the x-grid. Better be an odd number,
+                in order to make a symmteric grid.
 
-        Lkz: float (1/m)
-            Total spectral width in units of wavenumbers.
+        y_axis: tuple (Ly, Ny)
+          Define the y-axis grid with parameters:
+            Ly: float (m)
+                Full size of the calculation domain along y-axis.
 
-        Nx: int
-            Number of nodes of the x-grid.
+            Ny: int
+                Number of nodes of the y-grid.Better be an odd number,
+                in order to make a symmteric grid.
 
-        Ny: int
-            Number of nodes of the y-grid.
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
 
-        Nkz: int
-            Number of spectral modes (wavenumbers) to resolve the temporal
-            profile of the wave.
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
 
-        k0: float (1/m)
-            Central wavenumber of the spectral domain.
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
 
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
@@ -593,8 +630,8 @@ class PropagatorFFT2(PropagatorCommon):
             list of available options.
         """
         self.init_backend(backend)
-        self.init_kz(Lkz, Nkz, k0)
-        self.init_xykxy_fft2(Lx, Ly, Nx, Ny, dtype)
+        self.init_kz(kz_axis)
+        self.init_xykxy_fft2(x_axis, y_axis, dtype)
         self.init_TST()
 
     def init_TST(self):
