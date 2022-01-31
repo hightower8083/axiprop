@@ -108,7 +108,7 @@ def get_temporal_3d(u, t, kz):
     u_t = np.empty((Nt, Nx, Ny))
 
     for it in prange(Nt):
-        FFT_factor = np.exp(1j * kz * c * t[it])
+        FFT_factor = np.exp(-1j * kz * c * t[it])
         for ix in range(Nx):
             for iy in range(Ny):
                 u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
