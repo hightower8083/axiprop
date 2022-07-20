@@ -11,13 +11,12 @@ This file contains main classes of axiprop:
 - PropagatorFFT2
 """
 import numpy as np
-from scipy.constants import c
 from scipy.special import j0, j1, jn_zeros
-import os, sys
+import os
 from .backends import AVAILABLE_BACKENDS
 
 try:
-    from tqdm import tqdm
+    from tqdm.auto import tqdm
     tqdm_available = True
     bar_format='{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
 except Exception:
@@ -179,6 +178,9 @@ class PropagatorCommon:
         self.Nr = self.r.size
         self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
 
+        self.kx = kx # [:,None] * np.ones_like(ky[None,:])
+        self.ky = ky # [:,None] * np.ones_like(ky[None,:])
+
     def step(self, u, dz, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
@@ -329,6 +331,32 @@ class PropagatorCommon:
 
         self.z_propagation += dz
         return u_out
+
+    def get_Ez(self, ux):
+        """
+        Get a longitudinal field component from the transverse field using the
+        Poisson equation in vacuum DIV.E = 0.
+        Parameters
+        ----------
+        ux: 2darray of complex or double
+            Spectral-radial distribution of the field to be propagated.
+        """
+
+        uz = np.zeros_like(ux)
+        kx_2d = self.kx[:,None] * np.ones_like(self.ky[None,:])
+        kx_2d = self.bcknd.to_device(kx_2d)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(ux[ikz,:])
+            self.TST()
+
+            kz_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
+                                                           self.kr**2 ))
+            self.u_ht *= - kx_2d / kz_loc
+            self.iTST()
+            uz[ikz] = self.bcknd.to_host(self.u_iht)
+
+        return uz
 
 class PropagatorSymmetric(PropagatorCommon):
     """
