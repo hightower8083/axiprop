@@ -6,7 +6,7 @@ Fourier transforms
 
 This library contains methods and convenience tools to model propagation of the 3D optical
 field. Computations can be done using number of backends:
-- NumPy (**CPU**) optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or
+- [NumPy](https://numpy.org) (**CPU**) optionally enhanced via [mkl_fft](https://github.com/IntelPython/mkl_fft) or
 [pyfftw](https://github.com/pyFFTW/pyFFTW)
 - [CuPy](https://cupy.dev) for **GPU** calculations via Nvidia CUDA driver
 - [ArrayFire](https://arrayfire.com) for **GPU** calculations via CUDA or OpenCL drivers
