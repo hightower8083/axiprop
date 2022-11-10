@@ -16,7 +16,7 @@ Currently methods include:
 - `PropagatorSymmetric`: cylindical axisymmetric propagator with the symmetric DHT proposed in 
 [[M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)](https://doi.org/10.1364/JOSAA.21.000053)]
 - `PropagatorResampling`: cylindical axisymmetric propagator with a more generic DHT which allows for arbitrary
-sampling of radial axis
+sampling of radial axis [[K. Oubrerie, I.A. Andriyash et al, J. Opt. 24, 045503 (2022)](https://doi.org/10.1088/2040-8986/ac57d2)]
 - `PropagatorFFT2`: fully 3D FFT-based propagator
 
 ### Usage
