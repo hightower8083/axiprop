@@ -93,7 +93,7 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_rkr_jroot_both(self, r_axis, dtype):
+    def init_rkr_jroot_both(self, r_axis, dtype, mode):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
@@ -113,7 +113,7 @@ class PropagatorCommon:
         self.Rmax, self.Nr = r_axis
         self.dtype = dtype
 
-        alpha = jn_zeros(0, self.Nr+1)
+        alpha = jn_zeros(mode, self.Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
@@ -488,7 +488,7 @@ class PropagatorResampling(PropagatorCommon):
     """
 
     def __init__(self, r_axis, kz_axis,
-                 Rmax_new=None, Nr_new=None,
+                 Rmax_new=None, Nr_new=None, mode=0,
                  dtype=np.complex, backend=None):
         """
         Construct the propagator.
@@ -534,11 +534,11 @@ class PropagatorResampling(PropagatorCommon):
         """
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_jroot_both(r_axis, dtype)
+        self.init_rkr_jroot_both(r_axis, dtype, mode)
 
-        self.init_TST(Rmax_new, Nr_new)
+        self.init_TST(Rmax_new, Nr_new, mode)
 
-    def init_TST(self, Rmax_new, Nr_new):
+    def init_TST(self, Rmax_new, Nr_new, mode):
         """
         Setup DHT transform and data buffers.
 
@@ -565,17 +565,19 @@ class PropagatorResampling(PropagatorCommon):
             self.Nr_new = Nr
         self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
 
-        alpha = jn_zeros(0, Nr+1)
+        alpha = jn_zeros(mode, Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
         kr = self.bcknd.to_host(self.kr)
 
-        self.TM = j0(self.r[:,None] * kr[None,:])
+        jn_fu =  [j0,j1][mode]
+
+        self.TM = jn_fu(self.r[:,None] * kr[None,:])
         self.TM = self.bcknd.inv(self.TM, dtype)
 
         self.invTM = self.bcknd.to_device(\
-            j0(self.r_new[:,None]*kr[None,:]), dtype)
+            jn_fu(self.r_new[:,None]*kr[None,:]), dtype)
 
         self.shape_trns = (self.Nr, )
         self.shape_trns_new = (self.Nr_new, )

@@ -1,4 +1,4 @@
-7# Copyright 2020
+# Copyright 2020
 # Authors: Igor Andriyash
 # License: GNU GPL v3
 """
@@ -115,8 +115,6 @@ def get_temporal_3d(u, t, kz):
 
     return u_t
 
-
-
 #### FBPIC profile
 @njit
 def get_E_r(t, u, kz):
@@ -149,16 +147,6 @@ class AxipropLaser( LaserProfile ):
         self.E0x = E0 * np.cos(theta_pol)
         self.E0y = E0 * np.sin(theta_pol)
 
-    def E_field_antenna( self, x, y, z, t ):
-        u_r = get_E_r( t + self.time_offset, self.u, self.kz)
-        r_p = np.sqrt(x*x + y*y)
-        fu = interp1d(self.r, u_r,  kind='cubic',
-                      fill_value=0.0, bounds_error=False )
-        profile = fu(r_p)
-        Ex = self.E0x * profile
-        Ey = self.E0y * profile
-        return( Ex.real, Ey.real )
-
     def E_field( self, x, y, z, t ):
 
         Ex = np.zeros_like(x)
@@ -181,6 +169,44 @@ class AxipropLaser( LaserProfile ):
 
         return( Ex.real, Ey.real )
 
+
+class AxipropLaserAntenna( LaserProfile ):
+
+    def __init__( self, E0, u, kz, r, time_offset=0.0, z0=0.0,
+                  theta_pol=0., lambda0=0.8e-6 ):
+
+        LaserProfile.__init__(self, propagation_direction=1, gpu_capable=False)
+
+        self.u = u
+        self.kz = kz
+        self.r = r
+        self.time_offset = time_offset
+        self.z0 = z0
+
+        self.E0x = E0 * np.cos(theta_pol)
+        self.E0y = E0 * np.sin(theta_pol)
+
+    def E_field( self, x, y, z, t ):
+        if type(z) == np.ndarray:
+            z_a = z[0]
+        else:
+            z_a = z
+
+        if type(t) == np.ndarray:
+            t_loc = t[0]
+        else:
+            t_loc = t
+
+        u_r = get_E_r( t_loc - z_a/c + self.z0/c + self.time_offset,
+                        self.u, self.kz)
+
+        r_p = np.sqrt(x*x + y*y)
+        fu = interp1d(self.r, u_r,  kind='cubic',
+                      fill_value=0.0, bounds_error=False )
+        profile = fu(r_p)
+        Ex = self.E0x * profile
+        Ey = self.E0y * profile
+        return( Ex.real, Ey.real )
 
 ######## WARPX [WIP]
 
