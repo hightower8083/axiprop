@@ -23,7 +23,7 @@ except Exception:
     tqdm_available = False
 
 
-backend_strings_ordered = ['CU', 'AF', 'CL', 'NP_MKL', 'NP_FFTW', 'NP']
+backend_strings_ordered = ['CU', 'CL', 'AF','NP_MKL', 'NP_FFTW', 'NP']
 
 class PropagatorCommon:
     """
@@ -93,7 +93,7 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_rkr_jroot_both(self, r_axis, dtype, mode):
+    def init_rkr_jroot_both(self, r_axis, dtype, mode=0):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
