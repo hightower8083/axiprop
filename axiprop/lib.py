@@ -80,8 +80,6 @@ class PropagatorCommon:
                 profile of the wave.
         """
 
-        self.dtype = np.complex128
-
         if type(kz_axis) is tuple:
             k0, Lkz, Nkz = kz_axis
             Nkz_2 = int(np.ceil(Nkz/2))
@@ -110,17 +108,24 @@ class PropagatorCommon:
         dtype: type
             Data type to be used.
         """
-        self.Rmax, self.Nr = r_axis
-        self.dtype = dtype
+
+        if type(r_axis) is tuple:
+            self.Rmax, self.Nr = r_axis
+        else:
+            self.r = r_axis.copy()
+            self.Rmax = self.r.max()
+            self.Nr = self.r.size
 
         alpha = jn_zeros(mode, self.Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        self.r = self.Rmax * alpha / alpha_np1
+        if type(r_axis) is tuple:
+            self.r = self.Rmax * alpha / alpha_np1
+
         self.kr = self.bcknd.to_device(alpha/self.Rmax)
 
-    def init_xykxy_fft2(self, x_axis, y_axis, dtype):
+    def init_xykxy_fft2(self, x_axis, y_axis):
         """
         Setup the transverse `x` and `y` and corresponding spectral
         `kx` and `ky` grids, and fix data type.
@@ -144,12 +149,7 @@ class PropagatorCommon:
             Ny: int
                 Number of nodes of the y-grid.Better be an odd number,
                 in order to make a symmteric grid.
-
-        dtype: type
-            Data type to be used.
         """
-        self.dtype = dtype
-
         Lx, Nx = x_axis
         Ly, Ny = y_axis
 
@@ -358,6 +358,7 @@ class PropagatorCommon:
 
         return uz
 
+
 class PropagatorSymmetric(PropagatorCommon):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
@@ -413,9 +414,11 @@ class PropagatorSymmetric(PropagatorCommon):
             Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
             list of available options.
         """
+        self.dtype = dtype
+
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_jroot_both(r_axis, dtype)
+        self.init_rkr_jroot_both(r_axis)
         self.init_TST(Nr_new)
 
     def init_TST(self, Nr_new):
@@ -473,6 +476,7 @@ class PropagatorSymmetric(PropagatorCommon):
                                       self.u_ht, self.u_iht)
         self.u_iht *= self._j[:self.Nr_new]
 
+
 class PropagatorResampling(PropagatorCommon):
     """
     Class for the propagator with the non-symmetric Discrete Hankel transform
@@ -489,7 +493,7 @@ class PropagatorResampling(PropagatorCommon):
 
     def __init__(self, r_axis, kz_axis,
                  Rmax_new=None, Nr_new=None, mode=0,
-                 dtype=np.complex, backend=None):
+                 dtype=np.complex128, backend=None):
         """
         Construct the propagator.
 
@@ -532,9 +536,11 @@ class PropagatorResampling(PropagatorCommon):
             Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
             list of available options.
         """
+        self.dtype = dtype
+
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_jroot_both(r_axis, dtype, mode)
+        self.init_rkr_jroot_both(r_axis, mode)
 
         self.init_TST(Rmax_new, Nr_new, mode)
 
@@ -574,7 +580,8 @@ class PropagatorResampling(PropagatorCommon):
         jn_fu =  [j0,j1][mode]
 
         self.TM = jn_fu(self.r[:,None] * kr[None,:])
-        self.TM = self.bcknd.inv(self.TM, dtype)
+        self.TM = self.bcknd.inv_on_host(self.TM, dtype)
+        self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
             jn_fu(self.r_new[:,None]*kr[None,:]), dtype)
@@ -601,7 +608,6 @@ class PropagatorResampling(PropagatorCommon):
         """
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
 
-
 class PropagatorFFT2(PropagatorCommon):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
@@ -615,7 +621,7 @@ class PropagatorFFT2(PropagatorCommon):
 
     def __init__(self, x_axis, y_axis, kz_axis,
                  Rmax_new=None, Nr_new=None,
-                 dtype=np.complex, backend=None):
+                 dtype=np.complex128, backend=None):
         """
         Construct the propagator.
 
@@ -659,9 +665,11 @@ class PropagatorFFT2(PropagatorCommon):
             Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
             list of available options.
         """
+        self.dtype = dtype
+
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_xykxy_fft2(x_axis, y_axis, dtype)
+        self.init_xykxy_fft2(x_axis, y_axis)
         self.init_TST()
 
     def init_TST(self):

@@ -17,6 +17,13 @@ from scipy.linalg import inv as scipy_inv
 
 AVAILABLE_BACKENDS = {}
 
+def inv_on_host(self, M, dtype):
+    M = scipy_inv(M, overwrite_a=True)
+    M = M.astype(dtype)
+    return M
+
+
+
 ################ NumPy ################
 class BACKEND_NP():
 
@@ -25,6 +32,7 @@ class BACKEND_NP():
     sqrt = np.sqrt
     exp = np.exp
     abs = np.abs
+    inv_on_host = inv_on_host
 
     def to_host(self, arr_in):
         return arr_in
@@ -75,6 +83,8 @@ try:
         api = ocl_api()
         thrd = api.Thread(cqd=queue)
 
+        inv_on_host = inv_on_host
+
         def to_host(self, arr_in):
             arr_out = arr_in.get()
             return arr_out
@@ -100,8 +110,7 @@ try:
             return arr_out
 
         def inv(self, M, dtype):
-            M = scipy_inv(M, overwrite_a=True)
-            M = self.to_device(M)
+            print("matrix inversion on device is not available [CL]")
             return M
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
@@ -141,6 +150,7 @@ try:
         sqrt = cp.sqrt
         exp = cp.exp
         abs = cp.abs
+        inv_on_host = inv_on_host
 
         def to_host(self, arr_in):
             arr_out = self.cp.asnumpy(arr_in)
@@ -154,17 +164,8 @@ try:
             arr_out = self.cp.asarray(arr_in)
             return arr_out
 
-        """
         def inv(self, M, dtype):
-            M = self.to_device(M)
             M = self.cp.linalg.pinv(M)
-            return M
-        """
-
-        def inv(self, M, dtype):
-            M = scipy_inv(M, overwrite_a=True)
-            M = self.to_device(M)
-            M = M.astype(dtype)
             return M
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
@@ -194,6 +195,7 @@ try:
         import arrayfire as af
 
         name = 'AF'
+        inv_on_host = inv_on_host
 
         def to_host(self, arr_in):
             arr_out = arr_in.to_ndarray()
@@ -222,7 +224,6 @@ try:
             return arr_out
 
         def inv(self, M, dtype):
-            M = self.to_device(M)
             M = self.af.inverse(M)
             dtype_af = self.af.to_dtype[np.dtype(dtype).char]
             M = M.as_type(dtype_af)
