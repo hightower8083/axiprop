@@ -15,14 +15,14 @@ This file contains main backends of axiprop:
 import numpy as np
 from scipy.linalg import inv as scipy_inv
 
-AVAILABLE_BACKENDS = {}
-
 def inv_on_host(self, M, dtype):
-    M = scipy_inv(M, overwrite_a=True)
+    M = scipy_inv(M, overwrite_a=True, check_finite=False)
     M = M.astype(dtype)
     return M
 
+AVAILABLE_BACKENDS = {}
 
+backend_strings_ordered = ['CU', 'CL', 'AF','NP_MKL', 'NP_FFTW', 'NP']
 
 ################ NumPy ################
 class BACKEND_NP():
@@ -33,16 +33,13 @@ class BACKEND_NP():
     exp = np.exp
     abs = np.abs
     inv_on_host = inv_on_host
+    inv = inv_on_host
 
     def to_host(self, arr_in):
         return arr_in
 
     def to_device(self, arr_in, dtype=None):
         return arr_in
-
-    def inv(self, M, dtype):
-        M = scipy_inv(M, overwrite_a=True)
-        return M
 
     def make_matmul(self, matrix_in, vec_in, vec_out):
         def matmul(a, b, c):

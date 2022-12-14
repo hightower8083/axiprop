@@ -6,7 +6,7 @@ import os
 from .lib import PropagatorCommon
 from .lib import PropagatorFFT2
 from .lib import backend_strings_ordered
-from .lib import AVAILABLE_BACKENDS
+from .lib import AVAILABLE_BACKENDS, backend_strings_ordered
 
 from .lib import tqdm_available
 if tqdm_available:
@@ -40,74 +40,54 @@ class PropagatorFresnel(PropagatorCommon):
         else:
             u_step = u
 
+        Rmax_new = dz * self.kr[:self.Nr_new].max() / self.kz.max()
+        self.make_r_new( Rmax_new )
+        r2 = self.bcknd.to_device(self.r**2)
+
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
-        r2_loc = self.bcknd.to_device(self.r**2)
-
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
-
-            self.u_loc *= self.bcknd.exp( 0.5j * self.kz[ikz] / dz * r2_loc )
+            self.u_loc *= self.bcknd.exp( 0.5j * self.kz[ikz] / dz \
+                                            * r2 )
             self.TST()
 
-            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * r2_loc / dz**2)
-            coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
-            self.u_ht *= self.bcknd.exp( 1j * phase_loc )
-            self.u_ht *= coef_loc
+            r_loc = dz * self.kr / self.kz[ikz]
+#            r_loc = dz * self.kr[:self.Nr_new] / self.kz[ikz]
+            u_slice_new = self.gather_on_r_new( self.bcknd.to_host(self.u_ht),
+                                                r_loc )
 
-            u_step[ikz] = self.bcknd.to_host(self.u_ht)
+            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * self.r2_new / dz**2)
+            coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
+            u_slice_new *= np.exp( 1j * phase_loc )
+            u_slice_new *= coef_loc
+
+            u_step[ikz] = u_slice_new
+
             if tqdm_available and show_progress:
                 pbar.update(1)
-
-        kr = self.bcknd.to_host(self.kr)
-
-        Nr = kr.size
-
-        alpha = jn_zeros(0, Nr+1) # mode 0 only
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-        self.Rmax_new = dz * kr.max() / self.kz.min()
-        self.r_new = self.Rmax_new * alpha / alpha_np1
-
-#        self.r_new = dz * kr / self.kz[self.Nkz//2]
-#        self.Rmax_new = self.r_new.max()
-
-        # self.Rmax_new = dz * kr.max() / self.kz.min()
-        # self.r_new = np.linspace(0, self.Rmax_new, self.Nr)
-
-        u_slice_abs = np.zeros(self.Nr, dtype=np.double)
-        u_slice_angl = np.zeros(self.Nr, dtype=np.double)
-
-        for ikz in range(self.Nkz):
-            r_loc = dz * kr / self.kz[ikz]
-
-            interp_fu = interp1d(r_loc, np.abs(u_step[ikz]),
-                                 fill_value='extrapolate',
-                                 kind='quadratic',
-                                 bounds_error=False )
-            u_slice_abs = interp_fu(self.r_new)
-
-            interp_fu = interp1d(r_loc, np.unwrap(np.angle(u_step[ikz])),
-                                 fill_value='extrapolate',
-                                 kind='quadratic',
-                                 bounds_error=False )
-            u_slice_angl = interp_fu(self.r_new)
-
-            u_step[ikz] = u_slice_abs * np.exp( 1j * u_slice_angl )
 
         if tqdm_available and show_progress:
             pbar.close()
 
         return u_step
 
+
 class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
-    pass
+
+    def make_r_new(self, Rmax_new, Nr=None):
+        self.Rmax_new = Rmax_new
+        self.r_new = self.r
+        self.r2_new = self.r_new**2
+
+    def gather_on_r_new( self, u_loc, r_loc ):
+        return u_loc
 
 
 class PropagatorFresnelHT(PropagatorFresnel):
     def __init__(self, r_axis, kz_axis,
-                 N_pad=4, mode=0,
+                 Nr_new=None, N_pad=4, mode=0,
                  dtype=np.complex128, backend=None):
         """
         Construct the propagator.
@@ -121,7 +101,6 @@ class PropagatorFresnelHT(PropagatorFresnel):
 
             Nr: int
                 Number of nodes of the radial grid.
-
 
         kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
             When tuple is given the axis is created using:
@@ -148,6 +127,12 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.init_backend(backend)
         self.init_kz(kz_axis)
         self.init_rkr_jroot_padded(r_axis, N_pad, mode)
+
+        if Nr_new is None:
+            self.Nr_new = self.Nr
+        else:
+            self.Nr_new = Nr_new
+
         self.init_TST(mode)
 
     def init_rkr_jroot_padded(self, r_axis, N_pad, mode):
@@ -156,19 +141,48 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.Rmax_ext = self.Rmax * N_pad
         self.Nr_ext = self.Nr * N_pad
 
+        self.r_ext = np.linspace(0, self.Rmax_ext, self.Nr_ext)
+        dr = self.r_ext[[0,1]].ptp()
+        self.r_ext += 0.5 * dr
+        self.r = self.r_ext[:self.Nr]
+        self.Rmax = self.r.max()
+
         alpha = jn_zeros(mode, self.Nr_ext+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-#        self.r_ext = np.linspace(0, self.Rmax_ext, self.Nr_ext)
-        self.r_ext = self.Rmax_ext * alpha / alpha_np1
-        self.kr_ext = self.bcknd.to_device(alpha/self.Rmax_ext)
-        self.alpha_ext = alpha
+        self.kr = alpha/self.Rmax_ext
+        self.alpha = alpha
+        #self.kr = self.kr_ext[:self.Nr]
 
-        self.r = self.r_ext[:self.Nr]
-        self.Rmax = self.r.max()
-        self.kr = self.kr_ext[:self.Nr]
-        self.alpha = self.alpha_ext[:self.Nr]
+    def make_r_new(self, Rmax_new):
+        self.Rmax_new = Rmax_new
+        alpha = jn_zeros(0, self.Nr_new + 1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
+
+        self.r_new = alpha / alpha_np1 * Rmax_new
+        #self.r_new = np.linspace(0, Rmax_new, Nr)
+        #dr_new = self.r_new[[0,1]].ptp()
+        #self.r_new += 0.5 * dr_new
+
+        self.r2_new = self.r_new**2
+
+    def gather_on_r_new( self, u_loc, r_loc ):
+        interp_fu = interp1d(r_loc, np.abs(u_loc),
+                             fill_value='extrapolate',
+                             kind='cubic',
+                             bounds_error=False )
+        u_slice_abs = interp_fu(self.r_new)
+
+        interp_fu = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
+                             fill_value='extrapolate',
+                             kind='cubic',
+                             bounds_error=False )
+        u_slice_angl = interp_fu(self.r_new)
+
+        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        return u_slice_new
 
     def init_TST(self, mode):
         """
@@ -181,23 +195,18 @@ class PropagatorFresnelHT(PropagatorFresnel):
         Nr = self.Nr
         dtype = self.dtype
 
-        kr = self.bcknd.to_host(self.kr)
-        r = self.bcknd.to_host(self.r)
-
-        #kr = self.bcknd.to_host(self.kr_ext)
-        #r = self.bcknd.to_host(self.r_ext)
+        kr = self.kr
+        r = self.r_ext
 
         jn_fu =  [j0,j1][mode]
         jnp1_fu =  [j0,j1][mode+1]
 
-        self.TM = jn_fu(r[:,None] * kr[None,:])
-        self.TM = self.bcknd.inv_on_host(self.TM, dtype)
-        #self.TM = self.TM[:self.Nr, :self.Nr]
-        #self.TM = self.TM[:self.Nr, :]
-        self.TM = self.bcknd.to_device(self.TM)
+        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(self.alpha) )**2
 
-        self._TST_norm_coef = 0.5 * ( Rmax * jnp1_fu(self.alpha)) **2
-        self._TST_norm_coef = self.bcknd.to_device( self._TST_norm_coef )
+        self.TM = jn_fu(r[:,None] * kr[None,:]) * _norm_coef[None,:]
+        self.TM = self.bcknd.inv_on_host(self.TM, dtype)
+        self.TM = self.TM[:,:self.Nr]
+        self.TM = self.bcknd.to_device(self.TM)
 
         self.shape_trns = (self.Nr, )
         self.shape_trns_new = (self.Nr, )
@@ -212,4 +221,3 @@ class PropagatorFresnelHT(PropagatorFresnel):
         Forward QDHT transform.
         """
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
-        self.u_ht *= self._TST_norm_coef

@@ -13,7 +13,7 @@ This file contains main classes of axiprop:
 import numpy as np
 from scipy.special import j0, j1, jn_zeros
 import os
-from .backends import AVAILABLE_BACKENDS
+from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
 try:
     from tqdm.auto import tqdm
@@ -22,8 +22,6 @@ try:
 except Exception:
     tqdm_available = False
 
-
-backend_strings_ordered = ['CU', 'CL', 'AF','NP_MKL', 'NP_FFTW', 'NP']
 
 class PropagatorCommon:
     """
@@ -79,7 +77,6 @@ class PropagatorCommon:
                 Number of spectral modes (wavenumbers) to resolve the temporal
                 profile of the wave.
         """
-
         if type(kz_axis) is tuple:
             k0, Lkz, Nkz = kz_axis
             Nkz_2 = int(np.ceil(Nkz/2))
@@ -123,7 +120,8 @@ class PropagatorCommon:
         if type(r_axis) is tuple:
             self.r = self.Rmax * alpha / alpha_np1
 
-        self.kr = self.bcknd.to_device(alpha/self.Rmax)
+        self.kr = alpha/self.Rmax
+        self.kr2 = self.bcknd.to_device( self.kr**2 )
 
     def init_xykxy_fft2(self, x_axis, y_axis):
         """
@@ -176,7 +174,9 @@ class PropagatorCommon:
 
         self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
         self.Nr = self.r.size
-        self.kr = self.bcknd.to_device(np.sqrt(kx[:,None]**2 + ky[None,:]**2))
+
+        self.kr = np.sqrt(kx[:,None]**2 + ky[None,:]**2)
+        self.kr2 = self.bcknd.to_device( self.kr**2 )
 
         self.kx = kx # [:,None] * np.ones_like(ky[None,:])
         self.ky = ky # [:,None] * np.ones_like(ky[None,:])
@@ -213,7 +213,7 @@ class PropagatorCommon:
             self.u_loc = self.bcknd.to_device(u[ikz,:])
             self.TST()
 
-            phase_loc = self.kz[ikz]**2 - self.kr**2
+            phase_loc = self.kz[ikz]**2 - self.kr2
             phase_loc = self.bcknd.sqrt( (phase_loc>=0.)*phase_loc )
             self.u_ht *= self.bcknd.exp( 1j * dz * phase_loc )
 
@@ -259,7 +259,7 @@ class PropagatorCommon:
             self.u_loc = self.bcknd.to_device(u[ikz])
             self.TST()
             ik_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
-                                                     self.kr**2 ))
+                                                     self.kr2 ))
             for i_step in range(Nsteps):
                 self.u_ht *= self.bcknd.exp(1j * dz[i_step] * ik_loc )
                 self.iTST()
@@ -300,7 +300,7 @@ class PropagatorCommon:
 
             self.stepping_image[ikz] = self.u_ht.copy()
 
-            phase_loc = self.kz[ikz]**2 - self.kr**2
+            phase_loc = self.kz[ikz]**2 - self.kr2
             self.phase_loc[ikz] = self.bcknd.sqrt((phase_loc >= 0.)*phase_loc)
 
     def stepping(self, dz, u_out=None):
@@ -351,7 +351,7 @@ class PropagatorCommon:
             self.TST()
 
             kz_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
-                                                           self.kr**2 ))
+                                                           self.kr2 ))
             self.u_ht *= - kx_2d / kz_loc
             self.iTST()
             uz[ikz] = self.bcknd.to_host(self.u_iht)
@@ -570,21 +570,24 @@ class PropagatorResampling(PropagatorCommon):
         if self.Nr_new is None:
             self.Nr_new = Nr
         self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
+        dr_new = self.r_new[[0,1]].ptp()
+        self.r_new += 0.5 * dr_new
 
         alpha = jn_zeros(mode, Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        kr = self.bcknd.to_host(self.kr)
-
         jn_fu =  [j0,j1][mode]
+        jnp1_fu = [j0,j1][mode+1]
 
-        self.TM = jn_fu(self.r[:,None] * kr[None,:])
+        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(alpha) )**2
+
+        self.TM = jn_fu(self.r[:,None] * self.kr[None,:]) * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
-            jn_fu(self.r_new[:,None]*kr[None,:]), dtype)
+            jn_fu(self.r_new[:,None] * self.kr[None,:]) * _norm_coef[None,:], dtype)
 
         self.shape_trns = (self.Nr, )
         self.shape_trns_new = (self.Nr_new, )
