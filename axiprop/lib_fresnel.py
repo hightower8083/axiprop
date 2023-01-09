@@ -8,6 +8,8 @@ from .lib import PropagatorFFT2
 from .lib import backend_strings_ordered
 from .lib import AVAILABLE_BACKENDS, backend_strings_ordered
 
+from .utils import unwrap1d
+
 from .lib import tqdm_available
 if tqdm_available:
     from .lib import tqdm
@@ -40,8 +42,10 @@ class PropagatorFresnel(PropagatorCommon):
         else:
             u_step = u
 
-        Rmax_new = dz * self.kr[:self.Nr_new].max() / self.kz.max()
-        self.make_r_new( Rmax_new )
+#        Rmax_new = dz * self.kr[:self.Nr_new].max() / self.kz.max()
+#        self.make_r_new( Rmax_new )
+        Rmax_new = dz * self.kr[:self.Nr_new].min() / self.kz[self.kz.size//2]
+        self.make_r_new(  Rmax_new=None, r_ax=dz * self.kr[:self.Nr_new] / self.kz.max() )
         r2 = self.bcknd.to_device(self.r**2)
 
         if tqdm_available and show_progress:
@@ -53,17 +57,16 @@ class PropagatorFresnel(PropagatorCommon):
                                             * r2 )
             self.TST()
 
-            r_loc = dz * self.kr / self.kz[ikz]
-#            r_loc = dz * self.kr[:self.Nr_new] / self.kz[ikz]
-            u_slice_new = self.gather_on_r_new( self.bcknd.to_host(self.u_ht),
-                                                r_loc )
+            u_slice_loc = self.bcknd.to_host(self.u_ht)
 
-            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * self.r2_new / dz**2)
+            """
+            r_loc = dz * self.kr[:self.Nr_new] / self.kz[ikz]
+            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * (r_loc*r_loc) / (dz*dz) )
             coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
-            u_slice_new *= np.exp( 1j * phase_loc )
-            u_slice_new *= coef_loc
+            u_slice_loc *= coef_loc * np.exp( 1j * phase_loc )
+            """
 
-            u_step[ikz] = u_slice_new
+            u_step[ikz] = u_slice_loc #self.gather_on_r_new( u_slice_loc, r_loc )
 
             if tqdm_available and show_progress:
                 pbar.update(1)
@@ -153,15 +156,19 @@ class PropagatorFresnelHT(PropagatorFresnel):
 
         self.kr = alpha/self.Rmax_ext
         self.alpha = alpha
-        #self.kr = self.kr_ext[:self.Nr]
 
-    def make_r_new(self, Rmax_new):
-        self.Rmax_new = Rmax_new
-        alpha = jn_zeros(0, self.Nr_new + 1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
+    def make_r_new(self, Rmax_new=None, r_ax=None):
+        if r_ax is None:
+            self.Rmax_new = Rmax_new
+            alpha = jn_zeros(0, self.Nr_new + 1)
+            alpha_np1 = alpha[-1]
+            alpha = alpha[:-1]
 
-        self.r_new = alpha / alpha_np1 * Rmax_new
+            self.r_new = alpha / alpha_np1 * Rmax_new
+        else:
+            self.Rmax_new = Rmax_new
+            self.r_new = r_ax.copy()
+
         #self.r_new = np.linspace(0, Rmax_new, Nr)
         #dr_new = self.r_new[[0,1]].ptp()
         #self.r_new += 0.5 * dr_new
@@ -169,18 +176,21 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.r2_new = self.r_new**2
 
     def gather_on_r_new( self, u_loc, r_loc ):
-        interp_fu = interp1d(r_loc, np.abs(u_loc),
+        return u_loc
+
+    def gather_on_r_new0( self, u_loc, r_loc ):
+        interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                              fill_value='extrapolate',
                              kind='cubic',
                              bounds_error=False )
-        u_slice_abs = interp_fu(self.r_new)
+        u_slice_abs = interp_fu_abs(self.r_new)
 
-        interp_fu = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
+        interp_fu_angl = interp1d(r_loc, unwrap1d(np.angle(u_loc)),
                              fill_value='extrapolate',
                              kind='cubic',
                              bounds_error=False )
-        u_slice_angl = interp_fu(self.r_new)
-
+        u_slice_angl = interp_fu_angl(self.r_new)
+        del interp_fu_abs, interp_fu_angl
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
         return u_slice_new
 
@@ -201,18 +211,23 @@ class PropagatorFresnelHT(PropagatorFresnel):
         jn_fu =  [j0,j1][mode]
         jnp1_fu =  [j0,j1][mode+1]
 
-        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(self.alpha) )**2
-
-        self.TM = jn_fu(r[:,None] * kr[None,:]) * _norm_coef[None,:]
+        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(self.alpha[:self.Nr_new]) )**2
+        self.TM = jn_fu(r[:, None] * kr[None,:self.Nr_new]) * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:self.Nr]
+
+#        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(self.alpha) )**2
+#        self.TM = jn_fu(r[:, None] * kr[None,:]) * _norm_coef[None,:]
+#        self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
+#        self.TM = self.TM[:self.Nr_new, :self.Nr]
+
         self.TM = self.bcknd.to_device(self.TM)
 
         self.shape_trns = (self.Nr, )
-        self.shape_trns_new = (self.Nr, )
+        self.shape_trns_new = (self.Nr_new, )
 
         self.u_loc = self.bcknd.zeros(self.Nr, dtype)
-        self.u_ht = self.bcknd.zeros(self.Nr, dtype)
+        self.u_ht = self.bcknd.zeros(self.Nr_new, dtype)
 
         self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
 

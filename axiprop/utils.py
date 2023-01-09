@@ -23,6 +23,50 @@ except Exception:
             return func(*args, **kw_args)
         return func_wrp
 
+
+
+"""
+from scipy.special import binom
+
+FD_shapes = [ (-1)**(n_order-np.arange(n_order+1)) \
+                          * binom(n_order, np.arange(n_order+1)) \
+                      for n_order in range(10)]
+FD_shape = FD_shapes[n_order][::-1]
+"""
+
+@njit
+def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=2):
+
+    angl = angl_in.copy()
+    period_span = period * np.arange(-n_span, n_span+1)
+
+    FD_shapes = [
+        np.array([1.]),
+        np.array([ 1., -1.]),
+        np.array([ 1., -2., 1.]),
+        np.array([ 1., -3., 3., -1.]),
+        np.array([ 1., -4.,  6., -4., 1.]),
+        np.array([ 1., -5., 10., -10., 5., -1.])
+        ]
+
+    FD_shape = FD_shapes[n_order]
+    angle_values = np.zeros_like(FD_shape)
+
+    for i_angl in range(1, angl.size):
+
+        for i_order in range(n_order+1):
+            if i_angl>i_order:
+                angle_values[i_order] = angl[i_angl-i_order]
+            else:
+                angle_values[i_order] = angl[i_order-1]
+
+        index_minimum_div = np.abs( (FD_shape * angle_values).sum() + \
+                                    period_span ).argmin()
+
+        angl[i_angl:] += period_span[index_minimum_div]
+
+    return angl
+
 def laser_from_fu(fu, kz, r, normalize=False):
     """
     Generate array with spectra-radial field

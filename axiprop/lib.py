@@ -88,7 +88,7 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_rkr_jroot_both(self, r_axis, dtype, mode=0):
+    def init_rkr_jroot_both(self, r_axis, mode=0):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
@@ -101,9 +101,6 @@ class PropagatorCommon:
 
             Nr: int
                 Number of nodes of the radial grid.
-
-        dtype: type
-            Data type to be used.
         """
 
         if type(r_axis) is tuple:
@@ -583,7 +580,7 @@ class PropagatorResampling(PropagatorCommon):
         _norm_coef = 2.0 /  ( Rmax * jnp1_fu(alpha) )**2
 
         self.TM = jn_fu(self.r[:,None] * self.kr[None,:]) * _norm_coef[None,:]
-        self.TM = self.bcknd.inv_on_host(self.TM, dtype)
+        self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\

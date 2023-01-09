@@ -13,10 +13,16 @@ This file contains main backends of axiprop:
 - NumPy + PyFFTW
 """
 import numpy as np
-from scipy.linalg import inv as scipy_inv
+from scipy.linalg import pinv as scipy_inv
+from scipy.linalg import inv as scipy_inv_sqr
 
 def inv_on_host(self, M, dtype):
-    M = scipy_inv(M, overwrite_a=True, check_finite=False)
+    M = scipy_inv(M, check_finite=False)
+    M = M.astype(dtype)
+    return M
+
+def inv_sqr_on_host(self, M, dtype):
+    M = scipy_inv_sqr(M, overwrite_a=True, check_finite=False)
     M = M.astype(dtype)
     return M
 
@@ -33,6 +39,7 @@ class BACKEND_NP():
     exp = np.exp
     abs = np.abs
     inv_on_host = inv_on_host
+    inv_sqr_on_host = inv_sqr_on_host
     inv = inv_on_host
 
     def to_host(self, arr_in):
@@ -81,6 +88,7 @@ try:
         thrd = api.Thread(cqd=queue)
 
         inv_on_host = inv_on_host
+        inv_sqr_on_host = inv_sqr_on_host
 
         def to_host(self, arr_in):
             arr_out = arr_in.get()
@@ -148,6 +156,7 @@ try:
         exp = cp.exp
         abs = cp.abs
         inv_on_host = inv_on_host
+        inv_sqr_on_host = inv_sqr_on_host
 
         def to_host(self, arr_in):
             arr_out = self.cp.asnumpy(arr_in)
@@ -193,6 +202,7 @@ try:
 
         name = 'AF'
         inv_on_host = inv_on_host
+        inv_sqr_on_host = inv_sqr_on_host
 
         def to_host(self, arr_in):
             arr_out = arr_in.to_ndarray()
