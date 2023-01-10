@@ -23,20 +23,15 @@ except Exception:
             return func(*args, **kw_args)
         return func_wrp
 
-
-
-"""
-from scipy.special import binom
-
-FD_shapes = [ (-1)**(n_order-np.arange(n_order+1)) \
-                          * binom(n_order, np.arange(n_order+1)) \
-                      for n_order in range(10)]
-FD_shape = FD_shapes[n_order][::-1]
-"""
-
 @njit
 def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=2):
-
+    """
+    from scipy.special import binom
+    FD_shapes = [ (-1)**(n_order-np.arange(n_order+1)) \
+                              * binom(n_order, np.arange(n_order+1)) \
+                          for n_order in range(10)]
+    FD_shape = FD_shapes[n_order][::-1]
+    """
     angl = angl_in.copy()
     period_span = period * np.arange(-n_span, n_span+1)
 
@@ -139,6 +134,7 @@ def get_temporal_slice2d(u, u_t, t, kz):
         FFT_factor = np.exp(-1j * kz * c * t[it])
         for ix in range(Nx):
             u_t[it, ix] = np.real(u[:, ix, Ny//2-1] * FFT_factor).sum()
+
     return u_t
 
 @njit
