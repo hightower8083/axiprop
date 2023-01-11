@@ -37,10 +37,11 @@ class PropagatorCommon:
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
 
-    def init_backend(self, backend):
+    def init_backend(self, backend, verbose=True):
 
-        print('Available backends are: ' \
-            + ', '.join(AVAILABLE_BACKENDS.keys()))
+        if verbose:
+            print('Available backends are: ' \
+                + ', '.join(AVAILABLE_BACKENDS.keys()))
 
         if backend is not None:
             backend_string = backend
@@ -56,7 +57,8 @@ class PropagatorCommon:
             raise Exception(f'Backend {backend_string} is not available')
 
         self.bcknd = AVAILABLE_BACKENDS[backend_string]()
-        print(f'{self.bcknd.name} is chosen')
+        if verbose:
+            print(f'{self.bcknd.name} is chosen')
 
     def init_kz(self, kz_axis):
         """
@@ -559,16 +561,16 @@ class PropagatorResampling(PropagatorCommon):
         Nr = self.Nr
         dtype = self.dtype
 
-        self.Rmax_new = Rmax_new
-        if self.Rmax_new is None:
+        if Rmax_new is None:
             self.Rmax_new = Rmax
-
-        self.Nr_new = Nr_new
-        if self.Nr_new is None:
             self.Nr_new = Nr
-        self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
-        dr_new = self.r_new[[0,1]].ptp()
-        self.r_new += 0.5 * dr_new
+            self.r_new = self.r
+        else:
+            self.Rmax_new = Rmax_new
+            self.Nr_new = Nr_new
+            self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
+            dr_new = self.r_new[[0,1]].ptp()
+            self.r_new += 0.5 * dr_new
 
         alpha = jn_zeros(mode, Nr+1)
         alpha_np1 = alpha[-1]
@@ -607,6 +609,7 @@ class PropagatorResampling(PropagatorCommon):
         Inverse QDHT transform.
         """
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
+
 
 class PropagatorFFT2(PropagatorCommon):
     """
