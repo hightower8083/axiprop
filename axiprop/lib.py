@@ -103,7 +103,7 @@ class PropagatorCommon:
 
     def init_r_sampled(self, r_axis):
         """
-        Setup the radial `r` grid.
+        Setup the radial `r` grid from an array
 
         Parameters
         ----------
@@ -117,7 +117,7 @@ class PropagatorCommon:
 
     def init_r_symmetric(self, r_axis):
         """
-        Setup radial `r` and spectral `kr` grids, and fix data type.
+        Setup radial `r` grid on jn-roots
 
         Parameters
         ----------
@@ -138,6 +138,19 @@ class PropagatorCommon:
         return r, Rmax, Nr
 
     def init_r_uniform(self, r_axis):
+        """
+        Setup a uniform radial `r` grid
+
+        Parameters
+        ----------
+        r_axis: tuple (Rmax, Nr)
+          Here:
+            Rmax: float (m)
+                Radial size of the calculation domain.
+
+            Nr: int
+                Number of nodes of the radial grid.
+        """
         Rmax, Nr = r_axis
         r = np.linspace(0, Rmax, Nr, endpoint=False)
         dr = r[[0,1]].ptp()
@@ -426,6 +439,9 @@ class PropagatorSymmetric(PropagatorCommon):
             New number of nodes of the trancated radial grid. If not defined
             `Nr` will be used.
 
+        mode: integer
+            Order of Bessel function used for DHT
+
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
 
@@ -463,6 +479,7 @@ class PropagatorSymmetric(PropagatorCommon):
         """
         Rmax = self.Rmax
         Nr = self.Nr
+        Nr_new = self.Nr_new
         dtype = self.dtype
         mode = self.mode
         alpha = self.alpha
@@ -476,15 +493,15 @@ class PropagatorSymmetric(PropagatorCommon):
                      / denominator
         self.TM = self.bcknd.to_device(self.TM, dtype)
 
-        self.shape_trns = (self.Nr, )
-        self.shape_trns_new = (self.Nr_new, )
+        self.shape_trns = (Nr, )
+        self.shape_trns_new = (Nr_new, )
 
-        self.u_loc = self.bcknd.zeros(self.Nr, dtype)
-        self.u_ht = self.bcknd.zeros(self.Nr, dtype)
-        self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
+        self.u_loc = self.bcknd.zeros(Nr, dtype)
+        self.u_ht = self.bcknd.zeros(Nr, dtype)
+        self.u_iht = self.bcknd.zeros(Nr_new, dtype)
 
         self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
-        self.iTST_matmul = self.bcknd.make_matmul(self.TM[:self.Nr_new],
+        self.iTST_matmul = self.bcknd.make_matmul(self.TM[:Nr_new],
                                            self.u_ht, self.u_iht)
 
     def TST(self):
@@ -568,6 +585,9 @@ class PropagatorResampling(PropagatorCommon):
             New number of nodes of the radial grid. If not defined `Nr`
             will be used.
 
+        mode: integer
+            Order of Bessel function used for DHT
+
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
 
@@ -613,22 +633,26 @@ class PropagatorResampling(PropagatorCommon):
             be used.
         """
         Nr = self.Nr
+        Nr_new = self.Nr_new
+        r = self.r
+        r_new = self.r_new
+        kr = self.kr
         dtype = self.dtype
         mode = self.mode
 
-        self.TM = jn(mode, self.r[:,None] * self.kr[None,:])
+        self.TM = jn(mode, r[:,None] * kr[None,:])
         self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
-            jn(mode, self.r_new[:,None] * self.kr[None,:]) , dtype)
+            jn(mode, r_new[:,None] * kr[None,:]) , dtype)
 
-        self.shape_trns = (self.Nr, )
-        self.shape_trns_new = (self.Nr_new, )
+        self.shape_trns = (Nr, )
+        self.shape_trns_new = (Nr_new, )
 
-        self.u_loc = self.bcknd.zeros(self.Nr, dtype)
-        self.u_ht = self.bcknd.zeros(self.Nr, dtype)
-        self.u_iht = self.bcknd.zeros(self.Nr_new, dtype)
+        self.u_loc = self.bcknd.zeros(Nr, dtype)
+        self.u_ht = self.bcknd.zeros(Nr, dtype)
+        self.u_iht = self.bcknd.zeros(Nr_new, dtype)
 
         self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
         self.iTST_matmul = self.bcknd.make_matmul(self.invTM, self.u_ht, self.u_iht)
