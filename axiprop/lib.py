@@ -90,7 +90,27 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_rkr_jroot_both(self, r_axis, mode=0):
+    def init_rkr_sampled(self, r_axis, mode=0):
+        """
+        Setup radial `r` and spectral `kr` grids, and fix data type.
+
+        Parameters
+        ----------
+        r_axis: float ndarray (m)
+        """
+
+        self.r = r_axis.copy()
+        dr = self.r[[0,1]].ptp()
+        self.Rmax = self.r.max() + dr/2
+        self.Nr = self.r.size
+
+        alpha = jn_zeros(mode, self.Nr+1)
+        alpha_np1 = alpha[-1]
+        alpha = alpha[:-1]
+        self.kr = alpha/self.Rmax
+        self.kr2 = self.bcknd.to_device( self.kr**2 )
+
+    def init_rkr_symmetric(self, r_axis, mode=0):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
@@ -104,20 +124,13 @@ class PropagatorCommon:
             Nr: int
                 Number of nodes of the radial grid.
         """
-
-        if type(r_axis) is tuple:
-            self.Rmax, self.Nr = r_axis
-        else:
-            self.r = r_axis.copy()
-            self.Rmax = self.r.max()
-            self.Nr = self.r.size
+        self.Rmax, self.Nr = r_axis
 
         alpha = jn_zeros(mode, self.Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
 
-        if type(r_axis) is tuple:
-            self.r = self.Rmax * alpha / alpha_np1
+        self.r = self.Rmax * alpha / alpha_np1
 
         self.kr = alpha/self.Rmax
         self.kr2 = self.bcknd.to_device( self.kr**2 )
@@ -417,7 +430,7 @@ class PropagatorSymmetric(PropagatorCommon):
 
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_jroot_both(r_axis)
+        self.init_rkr_symmetric(r_axis)
         self.init_TST(Nr_new)
 
     def init_TST(self, Nr_new):
@@ -539,7 +552,11 @@ class PropagatorResampling(PropagatorCommon):
 
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_jroot_both(r_axis, mode)
+
+        if type(r_axis) is tuple:
+            self.init_rkr_symmetric(r_axis, mode)
+        else:
+            self.init_rkr_sampled(r_axis, mode)
 
         self.init_TST(Rmax_new, Nr_new, mode)
 
@@ -568,7 +585,7 @@ class PropagatorResampling(PropagatorCommon):
         else:
             self.Rmax_new = Rmax_new
             self.Nr_new = Nr_new
-            self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new)
+            self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new, endpoint=False)
             dr_new = self.r_new[[0,1]].ptp()
             self.r_new += 0.5 * dr_new
 
@@ -579,14 +596,12 @@ class PropagatorResampling(PropagatorCommon):
         jn_fu =  [j0,j1][mode]
         jnp1_fu = [j0,j1][mode+1]
 
-        _norm_coef = 2.0 /  ( Rmax * jnp1_fu(alpha) )**2
-
-        self.TM = jn_fu(self.r[:,None] * self.kr[None,:]) * _norm_coef[None,:]
+        self.TM = jn_fu(self.r[:,None] * self.kr[None,:])
         self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
-            jn_fu(self.r_new[:,None] * self.kr[None,:]) * _norm_coef[None,:], dtype)
+            jn_fu(self.r_new[:,None] * self.kr[None,:]) , dtype)
 
         self.shape_trns = (self.Nr, )
         self.shape_trns_new = (self.Nr_new, )
