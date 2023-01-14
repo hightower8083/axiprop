@@ -110,9 +110,9 @@ class PropagatorCommon:
         r_axis: float ndarray (m)
         """
         r = r_axis.copy()
-        dr = r[[0,1]].ptp()
-        Rmax = r.max() + dr/2
         Nr = r.size
+        dr_est = (r[1:] - r[:-1]).mean()
+        Rmax = r.max() + dr_est/2
         return r, Rmax, Nr
 
     def init_r_symmetric(self, r_axis):
@@ -455,16 +455,23 @@ class PropagatorSymmetric(PropagatorCommon):
         self.init_backend(backend)
         self.init_kz(kz_axis)
         self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
+        self.init_kr()
 
         # Setup a truncated output grid if needed
-        self.Nr_new = Nr_new
         if Nr_new is None:
-            self.Nr_new = Nr
-        self.r_new = self.r[:self.Nr_new]
-        dr = self.r[[0,1]].ptp()
-        self.Rmax_new = self.r_new.max() + dr/2
+            self.Nr_new = self.Nr
+            self.r_new = self.r
+            self.Rmax_new = self.Rmax
+        elif Nr_new>=self.Nr:
+            self.Nr_new = sel.Nr
+            self.r_new = self.r
+            self.Rmax_new = self.Rmax
+        else:
+            self.Nr_new = Nr_new
+            self.r_new = self.r[:Nr_new]
+            self.Rmax_new = self.r_new.max() * self.alpha[Nr_new] \
+                            / self.alpha[Nr_new-1]
 
-        self.init_kr()
         self.init_TST(Nr_new)
 
     def init_TST(self, Nr_new):
