@@ -11,7 +11,7 @@ This file contains main classes of axiprop:
 - PropagatorFFT2
 """
 import numpy as np
-from scipy.special import j0, j1, jn_zeros
+from scipy.special import j0, j1, jn, jn_zeros
 import os
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -90,27 +90,32 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_rkr_sampled(self, r_axis, mode=0):
+    def init_kr(self):
         """
-        Setup radial `r` and spectral `kr` grids, and fix data type.
+        Setup spectral `kr` grid and related data
+        """
+        mode = self.mode
+        alpha = jn_zeros(mode, self.Nr+1)
+        self.alpha_np1 = alpha[-1]
+        self.alpha = alpha[:-1]
+        self.kr = self.alpha / self.Rmax
+        self.kr2 = self.bcknd.to_device( self.kr**2 )
+
+    def init_r_sampled(self, r_axis):
+        """
+        Setup the radial `r` grid.
 
         Parameters
         ----------
         r_axis: float ndarray (m)
         """
+        r = r_axis.copy()
+        dr = r[[0,1]].ptp()
+        Rmax = r.max() + dr/2
+        Nr = r.size
+        return r, Rmax, Nr
 
-        self.r = r_axis.copy()
-        dr = self.r[[0,1]].ptp()
-        self.Rmax = self.r.max() + dr/2
-        self.Nr = self.r.size
-
-        alpha = jn_zeros(mode, self.Nr+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-        self.kr = alpha/self.Rmax
-        self.kr2 = self.bcknd.to_device( self.kr**2 )
-
-    def init_rkr_symmetric(self, r_axis, mode=0):
+    def init_r_symmetric(self, r_axis):
         """
         Setup radial `r` and spectral `kr` grids, and fix data type.
 
@@ -124,16 +129,20 @@ class PropagatorCommon:
             Nr: int
                 Number of nodes of the radial grid.
         """
-        self.Rmax, self.Nr = r_axis
+        Rmax, Nr = r_axis
 
-        alpha = jn_zeros(mode, self.Nr+1)
+        alpha = jn_zeros(self.mode, Nr+1)
         alpha_np1 = alpha[-1]
         alpha = alpha[:-1]
+        r = Rmax * alpha / alpha_np1
+        return r, Rmax, Nr
 
-        self.r = self.Rmax * alpha / alpha_np1
-
-        self.kr = alpha/self.Rmax
-        self.kr2 = self.bcknd.to_device( self.kr**2 )
+    def init_r_uniform(self, r_axis):
+        Rmax, Nr = r_axis
+        r = np.linspace(0, Rmax, Nr, endpoint=False)
+        dr = r[[0,1]].ptp()
+        r += 0.5 * dr
+        return r, Rmax, Nr
 
     def init_xykxy_fft2(self, x_axis, y_axis):
         """
@@ -385,9 +394,8 @@ class PropagatorSymmetric(PropagatorCommon):
     The inverse transform can be truncated to a smaller radial size (same grid).
     """
 
-    def __init__(self, r_axis, kz_axis,
-                 Nr_new=None, dtype=np.complex128,
-                 backend=None):
+    def __init__(self, r_axis, kz_axis, Nr_new=None,
+                 mode=0, dtype=np.complex128, backend=None):
         """
         Construct the propagator.
 
@@ -400,7 +408,6 @@ class PropagatorSymmetric(PropagatorCommon):
 
             Nr: int
                 Number of nodes of the radial grid.
-
 
         kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
             When tuple is given the axis is created using:
@@ -427,10 +434,21 @@ class PropagatorSymmetric(PropagatorCommon):
             list of available options.
         """
         self.dtype = dtype
+        self.mode = mode
 
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        self.init_rkr_symmetric(r_axis)
+        self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
+
+        # Setup a truncated output grid if needed
+        self.Nr_new = Nr_new
+        if Nr_new is None:
+            self.Nr_new = Nr
+        self.r_new = self.r[:self.Nr_new]
+        dr = self.r[[0,1]].ptp()
+        self.Rmax_new = self.r_new.max() + dr/2
+
+        self.init_kr()
         self.init_TST(Nr_new)
 
     def init_TST(self, Nr_new):
@@ -446,20 +464,16 @@ class PropagatorSymmetric(PropagatorCommon):
         Rmax = self.Rmax
         Nr = self.Nr
         dtype = self.dtype
+        mode = self.mode
+        alpha = self.alpha
+        alpha_np1 = self.alpha_np1
 
-        self.Nr_new = Nr_new
-        if self.Nr_new is None:
-            self.Nr_new = Nr
-        self.r_new = self.r[:self.Nr_new]
+        self._j = self.bcknd.to_device( np.abs(jn(mode+1, alpha)) / Rmax )
+        denominator = alpha_np1 * np.abs(jn(mode+1, alpha[:,None]) \
+                                       * jn(mode+1, alpha[None,:]))
 
-        alpha = jn_zeros(0, Nr+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-
-        self._j = self.bcknd.to_device((np.abs(j1(alpha)) / Rmax))
-
-        denominator = alpha_np1 * np.abs(j1(alpha[:,None]) * j1(alpha[None,:]))
-        self.TM = 2 * j0(alpha[:,None]*alpha[None,:]/alpha_np1) / denominator
+        self.TM = 2 * jn(mode, alpha[:,None] * alpha[None,:] / alpha_np1)\
+                     / denominator
         self.TM = self.bcknd.to_device(self.TM, dtype)
 
         self.shape_trns = (self.Nr, )
@@ -503,22 +517,22 @@ class PropagatorResampling(PropagatorCommon):
     This method samples output field on an arbitrary uniform radial grid.
     """
 
-    def __init__(self, r_axis, kz_axis,
-                 Rmax_new=None, Nr_new=None, mode=0,
-                 dtype=np.complex128, backend=None):
+    def __init__(self, r_axis, kz_axis, Rmax_new=None, Nr_new=None,
+                 r_axis_new=None, mode=0, dtype=np.complex128, backend=None):
         """
         Construct the propagator.
 
         Parameters
         ----------
-        r_axis: tuple (Rmax, Nr)
-          Here:
-            Rmax: float (m)
+        r_axis: multiple cases
+            tuple (Rmax, Nr)
+              Rmax: float (m)
                 Radial size of the calculation domain.
-
-            Nr: int
+              Nr: int
                 Number of nodes of the radial grid.
 
+            ndarray (m)
+                Radial grid.
 
         kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
             When tuple is given the axis is created using:
@@ -532,6 +546,19 @@ class PropagatorResampling(PropagatorCommon):
               Nkz: int
                 Number of spectral modes (wavenumbers) to resolve the temporal
                 profile of the wave.
+
+        r_axis_new: multiple cases
+            tuple (Rmax_new, Nr_new)
+              Rmax_new: float (m)
+                New radial size of the calculation domain.
+              Nr_new: int
+                New number of nodes of the radial grid.
+
+            ndarray (m)
+                New radial grid.
+
+            None (default)
+                No resampling
 
         Rmax_new: float (m) (optional)
             New radial size for the output calculation domain. If not defined
@@ -549,18 +576,29 @@ class PropagatorResampling(PropagatorCommon):
             list of available options.
         """
         self.dtype = dtype
+        self.mode = mode
 
         self.init_backend(backend)
         self.init_kz(kz_axis)
 
         if type(r_axis) is tuple:
-            self.init_rkr_symmetric(r_axis, mode)
+            self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
         else:
-            self.init_rkr_sampled(r_axis, mode)
+            self.r, self.Rmax, self.Nr = self.init_r_sampled(r_axis)
 
-        self.init_TST(Rmax_new, Nr_new, mode)
+        if Rmax_new is not None:
+            r_axis_new = (Rmax_new, Nr_new)
+            self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
+        else:
+            if r_axis_new is None:
+                self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
+            else:
+                self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
 
-    def init_TST(self, Rmax_new, Nr_new, mode):
+        self.init_kr()
+        self.init_TST()
+
+    def init_TST(self):
         """
         Setup DHT transform and data buffers.
 
@@ -574,34 +612,16 @@ class PropagatorResampling(PropagatorCommon):
             New number of nodes of the radial grid. If is `None`, `Nr` will
             be used.
         """
-        Rmax = self.Rmax
         Nr = self.Nr
         dtype = self.dtype
+        mode = self.mode
 
-        if Rmax_new is None:
-            self.Rmax_new = Rmax
-            self.Nr_new = Nr
-            self.r_new = self.r
-        else:
-            self.Rmax_new = Rmax_new
-            self.Nr_new = Nr_new
-            self.r_new = np.linspace(0, self.Rmax_new, self.Nr_new, endpoint=False)
-            dr_new = self.r_new[[0,1]].ptp()
-            self.r_new += 0.5 * dr_new
-
-        alpha = jn_zeros(mode, Nr+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-
-        jn_fu =  [j0,j1][mode]
-        jnp1_fu = [j0,j1][mode+1]
-
-        self.TM = jn_fu(self.r[:,None] * self.kr[None,:])
+        self.TM = jn(mode, self.r[:,None] * self.kr[None,:])
         self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
-            jn_fu(self.r_new[:,None] * self.kr[None,:]) , dtype)
+            jn(mode, self.r_new[:,None] * self.kr[None,:]) , dtype)
 
         self.shape_trns = (self.Nr, )
         self.shape_trns_new = (self.Nr_new, )
