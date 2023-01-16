@@ -117,7 +117,7 @@ def get_temporal_radial(u, u_t, t, kz):
     for it in prange(Nt):
         FFT_factor = np.exp(-1j * kz * c * t[it])
         for ir in range(Nr):
-            u_t[it, ir] = np.real(u[:, ir] * FFT_factor).sum()
+            u_t[it, ir] += np.real(u[:, ir] * FFT_factor).sum()
     return u_t
 
 @njit
@@ -133,7 +133,7 @@ def get_temporal_slice2d(u, u_t, t, kz):
     for it in prange(Nt):
         FFT_factor = np.exp(-1j * kz * c * t[it])
         for ix in range(Nx):
-            u_t[it, ix] = np.real(u[:, ix, Ny//2-1] * FFT_factor).sum()
+            u_t[it, ix] += np.real(u[:, ix, Ny//2-1] * FFT_factor).sum()
 
     return u_t
 
