@@ -90,15 +90,15 @@ class PropagatorCommon:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
-    def init_kr(self):
+    def init_kr(self, Rmax, Nr):
         """
         Setup spectral `kr` grid and related data
         """
         mode = self.mode
-        alpha = jn_zeros(mode, self.Nr+1)
+        alpha = jn_zeros(mode, Nr+1)
         self.alpha_np1 = alpha[-1]
         self.alpha = alpha[:-1]
-        self.kr = self.alpha / self.Rmax
+        self.kr = self.alpha / Rmax
         self.kr2 = self.bcknd.to_device( self.kr**2 )
 
     def init_r_sampled(self, r_axis):
@@ -455,7 +455,7 @@ class PropagatorSymmetric(PropagatorCommon):
         self.init_backend(backend)
         self.init_kz(kz_axis)
         self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
-        self.init_kr()
+        self.init_kr(self.Rmax, self.Nr)
 
         # Setup a truncated output grid if needed
         if Nr_new is None:
@@ -622,7 +622,7 @@ class PropagatorResampling(PropagatorCommon):
             else:
                 self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
 
-        self.init_kr()
+        self.init_kr(self.Rmax, self.Nr)
         self.init_TST()
 
     def init_TST(self):
