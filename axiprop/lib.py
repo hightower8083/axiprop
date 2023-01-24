@@ -621,12 +621,13 @@ class PropagatorResampling(PropagatorCommon):
 
         if Rmax_new is not None:
             r_axis_new = (Rmax_new, Nr_new)
+
+        if r_axis_new is None:
+            self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
+        elif type(r_axis_new) is tuple:
             self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
         else:
-            if r_axis_new is None:
-                self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
-            else:
-                self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
+            self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
 
         self.init_kr(self.Rmax, self.Nr)
         self.init_TST()
