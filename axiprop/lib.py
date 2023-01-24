@@ -261,7 +261,7 @@ class PropagatorCommon:
 
         return u_step
 
-    def steps(self, u, dz, show_progress=True):
+    def steps(self, u, dz=None, z_axis=None, show_progress=True):
         """
         Propagate wave `u` over the multiple steps.
 
@@ -273,12 +273,18 @@ class PropagatorCommon:
         dz: array of floats (m)
             Steps over which wave should be propagated.
 
+        z_axis: array of floats (m) (optional)
+            Axis over which wave should be propagated. Overrides dz.
+
         Returns
         -------
         u: 3darray of complex or double
             Array with the steps of the propagated field.
         """
         assert u.dtype == self.dtype
+        if z_axis is not None:
+            dz = np.r_[z_axis[0], np.diff(z_axis)]
+
         Nsteps = len(dz)
         if Nsteps==0:
             return None

@@ -7,7 +7,6 @@ from .lib import PropagatorCommon
 from .lib import PropagatorFFT2
 from .lib import backend_strings_ordered
 from .lib import AVAILABLE_BACKENDS, backend_strings_ordered
-
 from .utils import unwrap1d
 
 from .lib import tqdm_available
@@ -42,23 +41,17 @@ class PropagatorFresnel(PropagatorCommon):
         else:
             u_step = u
 
-#        Rmax_new = dz * self.kr[:self.Nr_new].max() / self.kz.max()
-#        self.make_r_new( Rmax_new )
-
-#        Rmax_new = dz * self.kr[:self.Nr_new].min() / self.kz[self.kz.size//2]
-#        self.make_r_new(  Rmax_new=None, r_ax=dz * self.kr[:self.Nr_new] / self.kz.max() )
-
-        self.r_new =  dz * self.kr[:self.Nr_new] / self.kz[self.kz.size//2]
-        # self.r2_new = self.r_new**2
         r2 = self.bcknd.to_device(self.r**2)
 
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
+        if self.r_axis_new is None:
+            self.r_new =  dz * self.kr[:self.Nr] / self.kz[self.kz.size//2]
+
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
-            self.u_loc *= self.bcknd.exp( 0.5j * self.kz[ikz] / dz \
-                                            * r2 )
+            self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * r2)
             self.TST()
 
             u_slice_loc = self.bcknd.to_host(self.u_ht)
@@ -68,9 +61,9 @@ class PropagatorFresnel(PropagatorCommon):
             coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
             u_slice_loc *= coef_loc * np.exp( 1j * phase_loc )
 
+            u_slice_loc = self.gather_on_r_new(u_slice_loc, r_loc, self.r_new)
+
             u_step[ikz] = u_slice_loc
-            #self.gather_on_r_new( u_slice_loc, r_loc )
-            # u_slice_loc
 
             if tqdm_available and show_progress:
                 pbar.update(1)
@@ -80,9 +73,49 @@ class PropagatorFresnel(PropagatorCommon):
 
         return u_step
 
+    def steps(self, u, z_axis, show_progress=True):
+        """
+        Propagate wave `u` over the multiple steps.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        z_axis: array of floats (m)
+            Axis over which wave should be propagated.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
+        assert u.dtype == self.dtype
+        Nsteps = len(z_axis)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=Nsteps, bar_format=bar_format)
+
+        for i_step, z_dest in enumerate(z_axis):
+            u_steps[i_step] = self.step(u, z_dest)
+            if tqdm_available and show_progress:
+                pbar.update(1)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
 
 class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
+    pass
 
+"""
     def make_r_new(self, Rmax_new, Nr=None):
         self.Rmax_new = Rmax_new
         self.r_new = self.r
@@ -90,11 +123,11 @@ class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
 
     def gather_on_r_new( self, u_loc, r_loc ):
         return u_loc
-
+"""
 
 class PropagatorFresnelHT(PropagatorFresnel):
     def __init__(self, r_axis, kz_axis,
-                 Nr_new=None, N_pad=4, mode=0,
+                 r_axis_new=None, N_pad=4, mode=0,
                  dtype=np.complex128, backend=None):
         """
         Construct the propagator.
@@ -131,16 +164,17 @@ class PropagatorFresnelHT(PropagatorFresnel):
         """
         self.dtype = dtype
         self.mode = mode
+        self.r_axis_new = r_axis_new
 
         self.init_backend(backend)
         self.init_kz(kz_axis)
-        # self.init_rkr_jroot_padded(r_axis, N_pad, mode)
 
         if type(r_axis) is tuple:
             Rmax, Nr = r_axis
             self.Nr = Nr
             r_axis_ext = ( N_pad * Rmax, N_pad * Nr )
-            self.r_ext, self.Rmax_ext, self.Nr_ext = self.init_r_uniform(r_axis_ext)
+            self.r_ext, self.Rmax_ext, self.Nr_ext = \
+                            self.init_r_uniform(r_axis_ext)
 
             self.r = self.r_ext[:Nr]
             dr_est = (self.r[1:] - self.r[:-1]).mean()
@@ -158,10 +192,14 @@ class PropagatorFresnelHT(PropagatorFresnel):
             self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
             self.Nr_ext = self.r_ext.size
 
-        if Nr_new is None:
-            self.Nr_new = self.Nr
+        if r_axis_new is None:
+            self.Nr_new = Nr
+        elif type(r_axis_new) is tuple:
+            self.r_new, self.Rmax_new, self.Nr_new = \
+                self.init_r_uniform(self.r_axis_new)
         else:
-            self.Nr_new = Nr_new
+            self.r_new, self.Rmax_new, self.Nr_new = \
+                self.init_r_sampled(self.r_axis_new)
 
         self.init_kr(self.Rmax_ext, self.Nr_ext)
         self.init_TST()
@@ -213,61 +251,21 @@ class PropagatorFresnelHT(PropagatorFresnel):
         Forward QDHT transform.
         """
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
+        self.u_ht *= 2 * np.pi
 
-
-    def make_r_new(self, Rmax_new=None, r_ax=None):
-        if r_ax is None:
-            self.Rmax_new = Rmax_new
-            alpha = jn_zeros(0, self.Nr_new + 1)
-            alpha_np1 = alpha[-1]
-            alpha = alpha[:-1]
-
-            self.r_new = alpha / alpha_np1 * Rmax_new
-        else:
-            self.Rmax_new = Rmax_new
-            self.r_new = r_ax.copy()
-
-        #self.r_new = np.linspace(0, Rmax_new, Nr)
-        #dr_new = self.r_new[[0,1]].ptp()
-        #self.r_new += 0.5 * dr_new
-
-        self.r2_new = self.r_new**2
-
-    def gather_on_r_new0( self, u_loc, r_loc ):
-        return u_loc
-
-    def gather_on_r_new( self, u_loc, r_loc ):
+    def gather_on_r_new( self, u_loc, r_loc, r_new ):
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                              fill_value='extrapolate',
-                             kind='cubic',
+                             kind='linear',
                              bounds_error=False )
-        u_slice_abs = interp_fu_abs(self.r_new)
+        u_slice_abs = interp_fu_abs(r_new)
 
         interp_fu_angl = interp1d(r_loc, unwrap1d(np.angle(u_loc)),
                              fill_value='extrapolate',
-                             kind='cubic',
+                             kind='linear',
                              bounds_error=False )
-        u_slice_angl = interp_fu_angl(self.r_new)
+        u_slice_angl = interp_fu_angl(r_new)
         del interp_fu_abs, interp_fu_angl
+
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
         return u_slice_new
-
-    def init_rkr_jroot_padded(self, r_axis, N_pad, mode):
-        self.Rmax, self.Nr = r_axis
-
-        self.Rmax_ext = self.Rmax * N_pad
-        self.Nr_ext = self.Nr * N_pad
-
-        self.r_ext = np.linspace(0, self.Rmax_ext, self.Nr_ext)
-        dr = self.r_ext[[0,1]].ptp()
-        self.r_ext += 0.5 * dr
-        self.r = self.r_ext[:self.Nr]
-        self.Rmax = self.r.max()
-
-        alpha = jn_zeros(mode, self.Nr_ext+1)
-        alpha_np1 = alpha[-1]
-        alpha = alpha[:-1]
-
-        self.kr = alpha/self.Rmax_ext
-        self.alpha = alpha
-
