@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.special import j0, j1, jn, jn_zeros
 from scipy.interpolate import interp1d
-import os
+import os, warnings
 
 from .lib import PropagatorCommon
 from .lib import PropagatorFFT2
@@ -254,6 +254,9 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.u_ht *= 2 * np.pi
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
+        if r_new.max()>r_loc.max():
+            warnings.warn("Extrapolation will be used")
+
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                              fill_value='extrapolate',
                              kind='linear',

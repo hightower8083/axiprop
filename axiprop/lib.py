@@ -163,6 +163,14 @@ class PropagatorCommon:
         r += 0.5 * dr
         return r, Rmax, Nr
 
+    def apply_boundary(self, u, nr_boundary=16):
+        # apply the boundary "absorbtion"
+        absorb_layer_axis = np.r_[0 : np.pi/2 : nr_boundary*1j]
+        absorb_layer_shape = np.cos(absorb_layer_axis)**0.5
+        absorb_layer_shape[-1] = 0.0
+        u[:, -nr_boundary:] *= absorb_layer_shape
+        return u
+
     def init_xykxy_fft2(self, x_axis, y_axis):
         """
         Setup the transverse `x` and `y` and corresponding spectral
