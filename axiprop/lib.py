@@ -11,7 +11,7 @@ This file contains main classes of axiprop:
 - PropagatorFFT2
 """
 import numpy as np
-from scipy.special import j0, j1, jn, jn_zeros
+from scipy.special import jn, jn_zeros
 import os
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 

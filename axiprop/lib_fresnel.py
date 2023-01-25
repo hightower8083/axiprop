@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.special import j0, j1, jn, jn_zeros
+from scipy.special import jn, jn_zeros
 from scipy.interpolate import interp1d
 import os, warnings
 
@@ -15,6 +15,16 @@ if tqdm_available:
     from .lib import bar_format
 
 class PropagatorFresnel(PropagatorCommon):
+
+    def check_new_grid(self, dz):
+        r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
+        r_new = self.r_new
+
+        if r_new.max()>r_loc_min.max():
+            Nkr = int(r_new.max() / np.diff(r_loc_min).mean())
+            warnings.warn(
+                "Extrapolation will be used and may cause noise. "
+                + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
     def step(self, u, dz, overwrite=False, show_progress=False):
         """
@@ -47,7 +57,9 @@ class PropagatorFresnel(PropagatorCommon):
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
         if self.r_axis_new is None:
-            self.r_new =  dz * self.kr[:self.Nr] / self.kz[self.kz.size//2]
+            self.r_new =  dz * self.kr[:self.Nkr_new] / self.kz[self.kz.size//2]
+
+        self.check_new_grid(dz)
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
@@ -56,7 +68,7 @@ class PropagatorFresnel(PropagatorCommon):
 
             u_slice_loc = self.bcknd.to_host(self.u_ht)
 
-            r_loc = dz * self.kr[:self.Nr_new] / self.kz[ikz]
+            r_loc = dz * self.kr[:self.Nkr_new] / self.kz[ikz]
             phase_loc = self.kz[ikz] * dz * (1 + 0.5 * (r_loc*r_loc) / (dz*dz) )
             coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
             u_slice_loc *= coef_loc * np.exp( 1j * phase_loc )
@@ -127,7 +139,7 @@ class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
 
 class PropagatorFresnelHT(PropagatorFresnel):
     def __init__(self, r_axis, kz_axis,
-                 r_axis_new=None, N_pad=4, mode=0,
+                 r_axis_new=None, Nkr_new=None,N_pad=4, mode=0,
                  dtype=np.complex128, backend=None):
         """
         Construct the propagator.
@@ -201,6 +213,11 @@ class PropagatorFresnelHT(PropagatorFresnel):
             self.r_new, self.Rmax_new, self.Nr_new = \
                 self.init_r_sampled(self.r_axis_new)
 
+        if Nkr_new is None:
+            self.Nkr_new = self.Nr_new
+        else:
+            self.Nkr_new = Nkr_new
+
         self.init_kr(self.Rmax_ext, self.Nr_ext)
         self.init_TST()
 
@@ -222,19 +239,14 @@ class PropagatorFresnelHT(PropagatorFresnel):
         Nr_ext = self.Nr_ext
 
         Nr_new = self.Nr_new
-
+        Nkr_new = self.Nkr_new
         alpha = self.alpha
         kr = self.kr
 
-        _norm_coef = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[:Nr_new]) )**2
-        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nr_new]) * _norm_coef[None,:]
+        _norm_coef = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
+        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:Nr]
-
-#        _norm_coef = 2.0 /  ( Rmax * jn(mode+1, alpha) )**2
-#        self.TM = jn(mode, r[:, None] * kr[None,:]) * _norm_coef[None,:]
-#        self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
-#        self.TM = self.TM[:Nr_new, :Nr]
 
         self.TM = self.bcknd.to_device(self.TM)
 
@@ -242,7 +254,7 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.shape_trns_new = (Nr_new, )
 
         self.u_loc = self.bcknd.zeros(Nr, dtype)
-        self.u_ht = self.bcknd.zeros(Nr_new, dtype)
+        self.u_ht = self.bcknd.zeros(Nkr_new, dtype)
 
         self.TST_matmul = self.bcknd.make_matmul(self.TM, self.u_loc, self.u_ht)
 
@@ -254,9 +266,6 @@ class PropagatorFresnelHT(PropagatorFresnel):
         self.u_ht *= 2 * np.pi
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
-        if r_new.max()>r_loc.max():
-            warnings.warn("Extrapolation will be used")
-
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                              fill_value='extrapolate',
                              kind='linear',
