@@ -95,7 +95,13 @@ class PropagatorCommon:
         Setup spectral `kr` grid and related data
         """
         mode = self.mode
-        alpha = jn_zeros(mode, Nr+1)
+
+        if mode !=0:
+            alpha = np.r_[0., jn_zeros(mode, Nr)]
+        else:
+            alpha = jn_zeros(mode, Nr+1)
+
+        #alpha = jn_zeros(mode, Nr+1)
         self.alpha_np1 = alpha[-1]
         self.alpha = alpha[:-1]
         self.kr = self.alpha / Rmax
@@ -655,7 +661,11 @@ class PropagatorResampling(PropagatorCommon):
         mode = self.mode
 
         self.TM = jn(mode, r[:,None] * kr[None,:])
-        self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
+        if mode == 0:
+            self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
+        else:
+            self.TM = self.bcknd.inv_on_host(self.TM, dtype)
+
         self.TM = self.bcknd.to_device(self.TM)
 
         self.invTM = self.bcknd.to_device(\
