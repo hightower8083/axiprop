@@ -101,7 +101,6 @@ class PropagatorCommon:
         else:
             alpha = jn_zeros(mode, Nr+1)
 
-        #alpha = jn_zeros(mode, Nr+1)
         self.alpha_np1 = alpha[-1]
         self.alpha = alpha[:-1]
         self.kr = self.alpha / Rmax
@@ -428,7 +427,8 @@ class PropagatorSymmetric(PropagatorCommon):
     """
 
     def __init__(self, r_axis, kz_axis, Nr_new=None,
-                 mode=0, dtype=np.complex128, backend=None):
+                 mode=0, dtype=np.complex128,
+                 backend=None, verbose=True):
         """
         Construct the propagator.
 
@@ -472,7 +472,7 @@ class PropagatorSymmetric(PropagatorCommon):
         self.dtype = dtype
         self.mode = mode
 
-        self.init_backend(backend)
+        self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
         self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
         self.init_kr(self.Rmax, self.Nr)
@@ -562,7 +562,8 @@ class PropagatorResampling(PropagatorCommon):
     """
 
     def __init__(self, r_axis, kz_axis, Rmax_new=None, Nr_new=None,
-                 r_axis_new=None, mode=0, dtype=np.complex128, backend=None):
+                 r_axis_new=None, mode=0, dtype=np.complex128,
+                 backend=None, verbose=True):
         """
         Construct the propagator.
 
@@ -625,7 +626,7 @@ class PropagatorResampling(PropagatorCommon):
         self.dtype = dtype
         self.mode = mode
 
-        self.init_backend(backend)
+        self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
 
         if type(r_axis) is tuple:
@@ -714,8 +715,8 @@ class PropagatorFFT2(PropagatorCommon):
     """
 
     def __init__(self, x_axis, y_axis, kz_axis,
-                 Rmax_new=None, Nr_new=None,
-                 dtype=np.complex128, backend=None):
+                 Rmax_new=None, Nr_new=None, dtype=np.complex128,
+                 backend=None, verbose=True):
         """
         Construct the propagator.
 
@@ -761,7 +762,7 @@ class PropagatorFFT2(PropagatorCommon):
         """
         self.dtype = dtype
 
-        self.init_backend(backend)
+        self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
         self.init_xykxy_fft2(x_axis, y_axis)
         self.init_TST()
