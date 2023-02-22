@@ -10,7 +10,7 @@ import numpy as np
 from scipy.constants import c, e, m_e
 from scipy.interpolate import interp1d
 
-# try import numba and make dummy methods if it is not
+# try import numba and make dummy methods if cannot
 try:
     from numba import njit, prange
     #njit = njit(parallel=True, fastmath=True)

@@ -8,16 +8,17 @@ This file contains main user classes of axiprop:
 - PropagatorSymmetric
 - PropagatorResampling
 - PropagatorFFT2
+- PropagatorResamplingFresnel
+- PropagatorFFT2Fresnel
 """
 import numpy as np
 from scipy.special import jn
-from scipy.interpolate import interp1d
 
-from .base_classes import PropagatorCommon
+from .base_classes import PropagatorNoneParaxial
 from .base_classes import PropagatorFresnel
 
 
-class PropagatorSymmetric(PropagatorCommon):
+class PropagatorSymmetric(PropagatorNoneParaxial):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
     described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
@@ -148,7 +149,7 @@ class PropagatorSymmetric(PropagatorCommon):
         self.u_iht *= self._j[:self.Nr_new]
 
 
-class PropagatorResampling(PropagatorCommon):
+class PropagatorResampling(PropagatorNoneParaxial):
     """
     Class for the propagator with the non-symmetric Discrete Hankel transform
     (DHT) and possible different sampling for the input and output radial grids.
@@ -294,7 +295,7 @@ class PropagatorResampling(PropagatorCommon):
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
 
 
-class PropagatorFFT2(PropagatorCommon):
+class PropagatorFFT2(PropagatorNoneParaxial):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
     for TST.
@@ -520,32 +521,23 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
         self.u_ht *= 2 * np.pi
 
-    def gather_on_r_new( self, u_loc, r_loc, r_new ):
-        interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
-                                 fill_value='extrapolate',
-                                 kind='cubic',
-                                 bounds_error=False )
-        u_slice_abs = interp_fu_abs(r_new)
-
-        interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
-                                  fill_value='extrapolate',
-                                  kind='cubic',
-                                  bounds_error=False )
-        u_slice_angl = interp_fu_angl(r_new)
-        del interp_fu_abs, interp_fu_angl
-
-        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
-        return u_slice_new
+    def check_new_grid(self, dz):
+        r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
+        if self.r_new.max()>r_loc_min.max():
+            Nkr = int(self.r_new.max() / np.diff(r_loc_min).mean())
+            warnings.warn(
+                "Extrapolation will be used and may cause noise. "
+                + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
 
-class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
-    """
+class PropagatorFFT2Fresnel(PropagatorFFT2, PropagatorFresnel):
     def make_r_new(self, Rmax_new, Nr=None):
         self.Rmax_new = Rmax_new
         self.r_new = self.r
         self.r2_new = self.r_new**2
 
+    def check_new_grid(self, dz):
+        return
+
     def gather_on_r_new( self, u_loc, r_loc ):
         return u_loc
-    """
-    pass

@@ -1,16 +1,19 @@
-# Copyright 2020
+# Copyright 2023
 # Authors: Igor Andriyash
 # License: GNU GPL v3
 """
-Axiprop main file
+Axiprop base_classes file
 
 This file contains base classes of axiprop:
 - PropagatorCommon
-- PropagatorExtras
+- PropagatorNoneParaxial
+- PropagatorFresnel
 """
 import numpy as np
 from scipy.special import jn, jn_zeros
+from scipy.interpolate import interp1d
 import os, warnings
+
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
 try:
@@ -218,6 +221,32 @@ class PropagatorCommon:
         self.kx = kx # [:,None] * np.ones_like(ky[None,:])
         self.ky = ky # [:,None] * np.ones_like(ky[None,:])
 
+    def gather_on_r_new( self, u_loc, r_loc, r_new ):
+        interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
+                                 fill_value='extrapolate',
+                                 kind='cubic',
+                                 bounds_error=False )
+        u_slice_abs = interp_fu_abs(r_new)
+
+        interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
+                                  fill_value='extrapolate',
+                                  kind='cubic',
+                                  bounds_error=False )
+        u_slice_angl = interp_fu_angl(r_new)
+
+        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        return u_slice_new
+
+
+class PropagatorNoneParaxial(PropagatorCommon):
+    """
+    Base class for non-paraxial propagators. Contains methods to:
+    - perform a single-step calculation;
+    - perform a multi-step calculation;
+
+    This class should to be used to derive the actual Propagators
+    by adding proper methods for the Transverse Spectral Transforms (TST).
+    """
     def step(self, u, dz, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
@@ -321,17 +350,14 @@ class PropagatorCommon:
         return u_steps
 
 class PropagatorFresnel(PropagatorCommon):
+    """
+    Base class for paraxial propagators. Contains methods to:
+    - perform a single-step calculation;
+    - perform a multi-step calculation;
 
-    def check_new_grid(self, dz):
-        r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
-        r_new = self.r_new
-
-        if r_new.max()>r_loc_min.max():
-            Nkr = int(r_new.max() / np.diff(r_loc_min).mean())
-            warnings.warn(
-                "Extrapolation will be used and may cause noise. "
-                + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
-
+    This class should to be used to derive the actual Propagators
+    by adding proper methods for the Transverse Spectral Transforms (TST).
+    """
     def step(self, u, dz, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
@@ -426,95 +452,3 @@ class PropagatorFresnel(PropagatorCommon):
             pbar.close()
 
         return u_steps
-
-
-class PropagatorExtras:
-
-    def apply_boundary(self, u, nr_boundary=16):
-        # apply the boundary "absorbtion"
-        absorb_layer_axis = np.r_[0 : np.pi/2 : nr_boundary*1j]
-        absorb_layer_shape = np.cos(absorb_layer_axis)**0.5
-        absorb_layer_shape[-1] = 0.0
-        u[:, -nr_boundary:] *= absorb_layer_shape
-        return u
-
-    def initiate_stepping(self, u):
-        """
-        Initiate the stepped propagation mode. This mode allows computation
-        of the consequent steps with access to the result on each step.
-        In contrast to `step` can operate the `PropagatorResampling` class.
-
-        Parameters
-        ----------
-        u: 2darray of complex or double
-            Spectral-radial distribution of the field to be propagated.
-        """
-        assert u.dtype == self.dtype
-
-        self.stepping_image = self.bcknd.to_device( np.zeros_like(u) )
-        self.phase_loc = self.bcknd.to_device( np.zeros_like(u) )
-        self.z_propagation = 0.0
-
-        for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:])
-            self.TST()
-
-            self.stepping_image[ikz] = self.u_ht.copy()
-
-            phase_loc = self.kz[ikz]**2 - self.kr2
-            self.phase_loc[ikz] = self.bcknd.sqrt((phase_loc >= 0.)*phase_loc)
-
-    def stepping(self, dz, u_out=None):
-        """
-        Perform a step in the stepped propagation mode. This mode allows computation
-        of the consequent steps with access to the result on each step.
-        In contrast to `step` can operate the `PropagatorResampling` class.
-
-        Parameters
-        ----------
-        dz: float (m)
-            Step over which wave should be propagated.
-
-        u_out: 2darray of complex or double (optional)
-            Array to which data should be written.
-            If not provided will be allocated.
-        """
-        if u_out is None:
-            u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=self.dtype)
-
-        for ikz in range(self.Nkz):
-            self.stepping_image[ikz] *= self.bcknd.exp( \
-                1j * dz * self.phase_loc[ikz] )
-            self.u_ht = self.stepping_image[ikz].copy()
-            self.iTST()
-            u_out[ikz] = self.bcknd.to_host(self.u_iht)
-
-        self.z_propagation += dz
-        return u_out
-
-    def get_Ez(self, ux):
-        """
-        Get a longitudinal field component from the transverse field using the
-        Poisson equation in vacuum DIV.E = 0.
-        Parameters
-        ----------
-        ux: 2darray of complex or double
-            Spectral-radial distribution of the field to be propagated.
-        """
-
-        uz = np.zeros_like(ux)
-        kx_2d = self.kx[:,None] * np.ones_like(self.ky[None,:])
-        kx_2d = self.bcknd.to_device(kx_2d)
-
-        for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(ux[ikz,:])
-            self.TST()
-
-            kz_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
-                                                           self.kr2 ))
-            self.u_ht *= - kx_2d / kz_loc
-            self.iTST()
-            uz[ikz] = self.bcknd.to_host(self.u_iht)
-
-        return uz
