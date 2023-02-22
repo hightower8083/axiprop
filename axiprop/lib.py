@@ -13,12 +13,13 @@ This file contains main user classes of axiprop:
 """
 import numpy as np
 from scipy.special import jn
+import warnings
 
-from .base_classes import PropagatorNoneParaxial
-from .base_classes import PropagatorFresnel
+from .steppers import StepperNoneParaxial
+from .steppers import StepperFresnel
 
 
-class PropagatorSymmetric(PropagatorNoneParaxial):
+class PropagatorSymmetric(StepperNoneParaxial):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
     described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
@@ -149,7 +150,7 @@ class PropagatorSymmetric(PropagatorNoneParaxial):
         self.u_iht *= self._j[:self.Nr_new]
 
 
-class PropagatorResampling(PropagatorNoneParaxial):
+class PropagatorResampling(StepperNoneParaxial):
     """
     Class for the propagator with the non-symmetric Discrete Hankel transform
     (DHT) and possible different sampling for the input and output radial grids.
@@ -295,7 +296,7 @@ class PropagatorResampling(PropagatorNoneParaxial):
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
 
 
-class PropagatorFFT2(PropagatorNoneParaxial):
+class PropagatorFFT2(StepperNoneParaxial):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
     for TST.
@@ -392,7 +393,7 @@ class PropagatorFFT2(PropagatorNoneParaxial):
         self.u_iht = self.ifft2(self.u_ht, self.u_iht)
 
 
-class PropagatorResamplingFresnel(PropagatorFresnel):
+class PropagatorResamplingFresnel(StepperFresnel):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, Nkr_new=None,
                  N_pad=4, mode=0, dtype=np.complex128,
@@ -530,7 +531,7 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
                 + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
 
-class PropagatorFFT2Fresnel(PropagatorFFT2, PropagatorFresnel):
+class PropagatorFFT2Fresnel(PropagatorFFT2, StepperFresnel):
     def make_r_new(self, Rmax_new, Nr=None):
         self.Rmax_new = Rmax_new
         self.r_new = self.r
