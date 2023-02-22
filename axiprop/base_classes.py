@@ -10,7 +10,7 @@ This file contains base classes of axiprop:
 """
 import numpy as np
 from scipy.special import jn, jn_zeros
-import os
+import os, warnings
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
 try:
@@ -35,7 +35,7 @@ class PropagatorCommon:
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
 
-    def init_backend(self, backend, verbose=True):
+    def init_backend(self, backend, verbose):
 
         if verbose:
             print('Available backends are: ' \

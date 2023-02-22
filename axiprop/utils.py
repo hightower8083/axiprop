@@ -24,7 +24,7 @@ except Exception:
         return func_wrp
 
 @njit
-def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=2):
+def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
     """
     from scipy.special import binom
     FD_shapes = [ (-1)**(n_order-np.arange(n_order+1)) \

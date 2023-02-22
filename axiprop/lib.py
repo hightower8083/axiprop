@@ -4,7 +4,7 @@
 """
 Axiprop main file
 
-This file contains main user classes of non-paraxial axiprop:
+This file contains main user classes of axiprop:
 - PropagatorSymmetric
 - PropagatorResampling
 - PropagatorFFT2
@@ -15,7 +15,6 @@ from scipy.interpolate import interp1d
 
 from .base_classes import PropagatorCommon
 from .base_classes import PropagatorFresnel
-from .utils import unwrap1d
 
 
 class PropagatorSymmetric(PropagatorCommon):
@@ -32,7 +31,7 @@ class PropagatorSymmetric(PropagatorCommon):
     The inverse transform can be truncated to a smaller radial size (same grid).
     """
 
-    def __init__(self, r_axis, kz_axis, Nr_new=None,
+    def __init__(self, r_axis, kz_axis, r_axis_new=None,
                  mode=0, dtype=np.complex128,
                  backend=None, verbose=True):
         """
@@ -61,7 +60,7 @@ class PropagatorSymmetric(PropagatorCommon):
                 Number of spectral modes (wavenumbers) to resolve the temporal
                 profile of the wave.
 
-        Nr_new: int (optional)
+        r_axis_new: a tuple (Nr_new,) where Nr_new is int (optional)
             New number of nodes of the trancated radial grid. If not defined
             `Nr` will be used.
 
@@ -84,31 +83,27 @@ class PropagatorSymmetric(PropagatorCommon):
         self.init_kr(self.Rmax, self.Nr)
 
         # Setup a truncated output grid if needed
-        if Nr_new is None:
+        if r_axis_new is None:
             self.Nr_new = self.Nr
             self.r_new = self.r
             self.Rmax_new = self.Rmax
-        elif Nr_new>=self.Nr:
-            self.Nr_new = sel.Nr
-            self.r_new = self.r
-            self.Rmax_new = self.Rmax
         else:
-            self.Nr_new = Nr_new
-            self.r_new = self.r[:Nr_new]
-            self.Rmax_new = self.r_new.max() * self.alpha[Nr_new] \
-                            / self.alpha[Nr_new-1]
+            Nr_new = r_axis_new[0]
+            if Nr_new>=self.Nr:
+                self.Nr_new = sel.Nr
+                self.r_new = self.r
+                self.Rmax_new = self.Rmax
+            else:
+                self.Nr_new = Nr_new
+                self.r_new = self.r[:Nr_new]
+                self.Rmax_new = self.r_new.max() * self.alpha[Nr_new] \
+                                / self.alpha[Nr_new-1]
 
-        self.init_TST(Nr_new)
+        self.init_TST()
 
-    def init_TST(self, Nr_new):
+    def init_TST(self):
         """
         Setup QDHT transformation matrix and data buffers.
-
-        Parameters
-        ----------
-        Nr_new: int
-            New number of nodes of the trancated radial grid. If is `None`,
-            `Nr` will be used.
         """
         Rmax = self.Rmax
         Nr = self.Nr
@@ -167,8 +162,9 @@ class PropagatorResampling(PropagatorCommon):
     This method samples output field on an arbitrary uniform radial grid.
     """
 
-    def __init__(self, r_axis, kz_axis, Rmax_new=None, Nr_new=None,
-                 r_axis_new=None, mode=0, dtype=np.complex128,
+    def __init__(self, r_axis, kz_axis,
+                 r_axis_new=None, mode=0,
+                 dtype=np.complex128,
                  backend=None, verbose=True):
         """
         Construct the propagator.
@@ -211,14 +207,6 @@ class PropagatorResampling(PropagatorCommon):
             None (default)
                 No resampling
 
-        Rmax_new: float (m) (optional)
-            New radial size for the output calculation domain. If not defined
-            `Rmax` will be used.
-
-        Nr_new: int (optional)
-            New number of nodes of the radial grid. If not defined `Nr`
-            will be used.
-
         mode: integer
             Order of Bessel function used for DHT
 
@@ -239,9 +227,6 @@ class PropagatorResampling(PropagatorCommon):
             self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
         else:
             self.r, self.Rmax, self.Nr = self.init_r_sampled(r_axis)
-
-        if Rmax_new is not None:
-            r_axis_new = (Rmax_new, Nr_new)
 
         if r_axis_new is None:
             self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
@@ -321,8 +306,8 @@ class PropagatorFFT2(PropagatorCommon):
     """
 
     def __init__(self, x_axis, y_axis, kz_axis,
-                 Rmax_new=None, Nr_new=None, dtype=np.complex128,
-                 backend=None, verbose=True):
+                 dtype=np.complex128, backend=None,
+                 verbose=True):
         """
         Construct the propagator.
 
@@ -410,7 +395,7 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, Nkr_new=None,
                  N_pad=4, mode=0, dtype=np.complex128,
-                 backend=None):
+                 backend=None, verbose=True):
         """
         Construct the propagator.
 
@@ -448,7 +433,7 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
         self.mode = mode
         self.r_axis_new = r_axis_new
 
-        self.init_backend(backend)
+        self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
 
         if type(r_axis) is tuple:
@@ -478,10 +463,10 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
             self.Nr_new = Nr
         elif type(r_axis_new) is tuple:
             self.r_new, self.Rmax_new, self.Nr_new = \
-                self.init_r_uniform(self.r_axis_new)
+                self.init_r_uniform(r_axis_new)
         else:
             self.r_new, self.Rmax_new, self.Nr_new = \
-                self.init_r_sampled(self.r_axis_new)
+                self.init_r_sampled(r_axis_new)
 
         if Nkr_new is None:
             self.Nkr_new = self.Nr_new
@@ -537,20 +522,21 @@ class PropagatorResamplingFresnel(PropagatorFresnel):
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
-                             fill_value='extrapolate',
-                             kind='linear',
-                             bounds_error=False )
+                                 fill_value='extrapolate',
+                                 kind='cubic',
+                                 bounds_error=False )
         u_slice_abs = interp_fu_abs(r_new)
 
-        interp_fu_angl = interp1d(r_loc, unwrap1d(np.angle(u_loc)),
-                             fill_value='extrapolate',
-                             kind='linear',
-                             bounds_error=False )
+        interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
+                                  fill_value='extrapolate',
+                                  kind='cubic',
+                                  bounds_error=False )
         u_slice_angl = interp_fu_angl(r_new)
         del interp_fu_abs, interp_fu_angl
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
         return u_slice_new
+
 
 class PropagatorFresnelFFT(PropagatorFFT2, PropagatorFresnel):
     """
