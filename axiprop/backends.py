@@ -26,6 +26,7 @@ def inv_sqr_on_host(self, M, dtype):
     M = M.astype(dtype)
     return M
 
+
 AVAILABLE_BACKENDS = {}
 
 backend_strings_ordered = ['CU', 'CL', 'AF','NP_MKL', 'NP_FFTW', 'NP']
@@ -57,14 +58,18 @@ class BACKEND_NP():
 
     def make_fft2(self, vec_in, vec_out):
         def fft2(a, b):
-            b = np.fft.fft2(a, norm="ortho")
+            b = np.fft.fft2(a)
             return b
 
         def ifft2(a, b):
-            b = np.fft.ifft2(a, norm="ortho")
+            b = np.fft.ifft2(a)
+            return b
+ 
+        def fftshift(a):
+            b = np.fft.fftshift(a)
             return b
 
-        return fft2, ifft2
+        return fft2, ifft2, fftshift
 
 AVAILABLE_BACKENDS['NP'] = BACKEND_NP
 
@@ -79,7 +84,7 @@ try:
         import pyopencl.clmath as clmath
         from reikna.cluda import ocl_api
         from reikna.linalg import MatrixMul
-        from reikna.fft import FFT
+        from reikna.fft import FFT, FFTShift
 
         name = 'CL'
         ctx = create_some_context() #answers=[1,2])
@@ -130,6 +135,7 @@ try:
 
         def make_fft2(self, vec_in, vec_out):
             fft_reikna = self.FFT(vec_in).compile(self.thrd)
+            fftshift_reikna = self.FFTShift(vec_in).compile(self.thrd)
 
             def fft2(a, b):
                 fft_reikna(b, a, inverse=0)[0].wait()
@@ -139,7 +145,12 @@ try:
                 fft_reikna(b, a, inverse=1)[0].wait()
                 return b
 
-            return fft2, ifft2
+            def fftshift(a):
+                b = a.copy()
+                fftshift_reikna(b, a)[0].wait()
+                return b
+
+            return fft2, ifft2, fftshift
 
     AVAILABLE_BACKENDS['CL'] = BACKEND_CL
 except Exception:
@@ -183,14 +194,19 @@ try:
 
         def make_fft2(self, vec_in, vec_out):
             def fft2(a, b):
-                b = self.cp.fft.fft2(a, norm="ortho")
+                b = self.cp.fft.fft2(a)
                 return b
 
             def ifft2(a, b):
-                b = self.cp.fft.ifft2(a, norm="ortho")
+                b = self.cp.fft.ifft2(a)
                 return b
 
-            return fft2, ifft2
+            def fftshift(a):
+                b = self.cp.fft.fftshift(a)
+                return b
+
+            return fft2, ifft2, fftshift
+            
     AVAILABLE_BACKENDS['CU'] = BACKEND_CU
 except Exception:
     pass
@@ -252,7 +268,14 @@ try:
                 b = self.af.signal.ifft2(a)
                 return b
 
-            return fft2, ifft2
+            def fftshift(a):
+                b = self.to_host(a)
+                b = np.fft.fftshift(b)
+                b = self.bcknd.to_device(b)
+                return b
+
+            return fft2, ifft2, fftshift
+
     AVAILABLE_BACKENDS['AF'] = BACKEND_AF
 except Exception:
     pass
@@ -277,7 +300,11 @@ try:
                 b = self.mklifft2(a)
                 return b
 
-            return fft2, ifft2
+            def fftshift(a):
+                b = np.fft.fftshift(a)
+                return b
+
+            return fft2, ifft2, fftshift
 
     AVAILABLE_BACKENDS['NP_MKL'] = BACKEND_NPMKL
 except Exception:
@@ -309,7 +336,11 @@ try:
                 b = self.ifftw2(a, b)
                 return b
 
-            return fft2, ifft2
+            def fftshift(a):
+                b = np.fft.fftshift(a)
+                return b
+
+            return fft2, ifft2, fftshift
 
     AVAILABLE_BACKENDS['NP_FFTW'] = BACKEND_NPFFTW
 except Exception:

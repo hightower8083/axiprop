@@ -11,6 +11,7 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn, jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
+from unwrap import unwrap as unwrap2d
 import os
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
@@ -241,15 +242,15 @@ class CommonTools:
         x_new, y_new = r_new
 
         interp_fu_abs = RectBivariateSpline(
-             x_loc, y_loc, np.abs(u_loc)
+            x_loc, y_loc, np.abs(u_loc)
         )
 
         interp_fu_angl = RectBivariateSpline(
-            x_loc, y_loc, np.unwrap(np.angle(u_loc))
+            x_loc, y_loc, unwrap2d(np.angle(u_loc))
         )
 
-        u_slice_abs = interp_fu_abs.ev(x_new, y_new)
-        u_slice_angl = interp_fu_angl.ev(x_new, y_new)
+        u_slice_abs = interp_fu_abs(x_new, y_new)
+        u_slice_angl = interp_fu_angl(x_new, y_new)
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
         return u_slice_new

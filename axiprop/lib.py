@@ -377,7 +377,7 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
         self.u_ht = self.bcknd.zeros((Nx, Ny), dtype)
         self.u_iht = self.bcknd.zeros((Nx, Ny), dtype)
 
-        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_iht, self.u_ht)
+        self.fft2, self.ifft2, fftshift = self.bcknd.make_fft2(self.u_iht, self.u_ht)
 
     def TST(self):
         """
@@ -604,6 +604,7 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         Ly, Ny = y_axis
         self.Nx = Nx
         self.Ny = Ny
+        self.dV = Lx/Nx * Ly/Ny
 
         self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
         x, y, r, r2 = self.init_xy_uniform( (N_pad*Lx, N_pad*Nx),
@@ -624,27 +625,28 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         Ny_ext = self.ky.size
         Nx, Ny = self.r2.shape
         dtype = self.dtype
-
-        self.shape_trns_new = (Nx_ext, Ny_ext)
+        self.shape_trns_new = (Nx, Ny)
 
         self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)
         self.u_iht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
         self.u_ht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
-        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_iht, self.u_ht)
+        self.fft2, self.ifft2, self.fftshift = self.bcknd.make_fft2(self.u_iht, self.u_ht)
 
     def TST(self):
         """
         Forward FFT transform.
         """
         self.u_iht[:] = 0.0
-        ix0, iy0, Nx, Ny = self.ix0, self.iy0, self.Nx, self.Ny
-        self.u_iht[ix0 : ix0 + Nx, iy0 : iy0 + Ny] = self.u_loc
-        self.u_ht = self.fft2(self.u_iht, self.u_ht)
+        ix0, iy0 = self.ix0, self.iy0
+        Nx, Ny = self.Nx, self.Ny
 
-        # while testing
-        self.u_ht = self.bcknd.to_host(self.u_ht)
-        self.u_ht = np.fft.fftshift(self.u_ht)
-        self.u_ht = self.bcknd.to_device(self.u_ht)
+        for ix_loc in range(Nx):
+            ix_glob = ix0 + ix_loc
+            self.u_iht[ix_glob, iy0 : iy0 + Ny] = self.u_loc[ix_loc,:]
+
+        self.u_ht = self.fft2(self.u_iht, self.u_ht)
+        self.u_ht = self.fftshift(self.u_ht)
+        self.u_ht *= self.dV
 
     def get_local_grid(self, dz, ikz):
         kz_loc = self.kz[ikz]
@@ -655,8 +657,8 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         return r_loc, r2_loc
 
     def check_new_grid(self, dz):
+        ix0, iy0, Nx, Ny = self.ix0, self.iy0, self.Nx, self.Ny
         kz_max = self.kz.max()
-        self.x = dz * self.kx / kz_max
-        self.y = dz * self.ky / kz_max
+        self.x = dz * self.kx[ix0 : ix0 + Nx] / kz_max
+        self.y = dz * self.ky[iy0 : iy0 + Ny] / kz_max
         self.r_new = (self.x, self.y)
-        return

@@ -169,7 +169,7 @@ class StepperFresnel:
         self.check_new_grid(dz)
 
         for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:])
+            self.u_loc[:] = self.bcknd.to_device(u[ikz,:])
             self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
             self.TST()
             u_slice_loc = self.bcknd.to_host(self.u_ht)
