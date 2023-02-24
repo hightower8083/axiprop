@@ -4,7 +4,7 @@
 """
 Axiprop main file
 
-This file contains main user classes of axiprop:
+This file contains main propagators of axiprop:
 - PropagatorSymmetric
 - PropagatorResampling
 - PropagatorFFT2
@@ -15,11 +15,12 @@ import numpy as np
 from scipy.special import jn
 import warnings
 
-from .steppers import StepperNoneParaxial
+from .common import CommonTools
+from .steppers import StepperNonParaxial
 from .steppers import StepperFresnel
 
 
-class PropagatorSymmetric(StepperNoneParaxial):
+class PropagatorSymmetric(CommonTools, StepperNonParaxial):
     """
     Class for the propagator with the Quasi-Discrete Hankel transform (QDHT)
     described in [M. Guizar-Sicairos, J.C. Gutiérrez-Vega, JOSAA 21, 53 (2004)].
@@ -92,7 +93,7 @@ class PropagatorSymmetric(StepperNoneParaxial):
         else:
             Nr_new = r_axis_new[0]
             if Nr_new>=self.Nr:
-                self.Nr_new = sel.Nr
+                self.Nr_new = self.Nr
                 self.r_new = self.r
                 self.Rmax_new = self.Rmax
             else:
@@ -150,7 +151,7 @@ class PropagatorSymmetric(StepperNoneParaxial):
         self.u_iht *= self._j[:self.Nr_new]
 
 
-class PropagatorResampling(StepperNoneParaxial):
+class PropagatorResampling(CommonTools, StepperNonParaxial):
     """
     Class for the propagator with the non-symmetric Discrete Hankel transform
     (DHT) and possible different sampling for the input and output radial grids.
@@ -296,7 +297,7 @@ class PropagatorResampling(StepperNoneParaxial):
         self.u_iht = self.iTST_matmul(self.invTM, self.u_ht, self.u_iht)
 
 
-class PropagatorFFT2(StepperNoneParaxial):
+class PropagatorFFT2(CommonTools, StepperNonParaxial):
     """
     Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
     for TST.
@@ -357,18 +358,16 @@ class PropagatorFFT2(StepperNoneParaxial):
 
         self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
-        self.init_xykxy_fft2(x_axis, y_axis)
+        self.x, self.y, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
+        self.init_kxy_uniform(self.x, self.y)
         self.init_TST()
 
     def init_TST(self):
         """
         Setup data buffers for TST.
         """
-        Nr = self.Nr
-        Nx = self.Nx
-        Ny = self.Ny
-        self.Nr_new = Nr
-
+        Nx = self.x.size
+        Ny = self.y.size
         dtype = self.dtype
 
         self.shape_trns = (Nx, Ny)
@@ -378,7 +377,7 @@ class PropagatorFFT2(StepperNoneParaxial):
         self.u_ht = self.bcknd.zeros((Nx, Ny), dtype)
         self.u_iht = self.bcknd.zeros((Nx, Ny), dtype)
 
-        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_loc, self.u_ht, self.u_iht)
+        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_iht, self.u_ht)
 
     def TST(self):
         """
@@ -393,13 +392,13 @@ class PropagatorFFT2(StepperNoneParaxial):
         self.u_iht = self.ifft2(self.u_ht, self.u_iht)
 
 
-class PropagatorResamplingFresnel(StepperFresnel):
+class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, Nkr_new=None,
                  N_pad=4, mode=0, dtype=np.complex128,
                  backend=None, verbose=True):
         """
-        Construct the propagator.
+        The resampling RT propagator.
 
         Parameters
         ----------
@@ -434,6 +433,7 @@ class PropagatorResamplingFresnel(StepperFresnel):
         self.dtype = dtype
         self.mode = mode
         self.r_axis_new = r_axis_new
+        self.gather_on_new_grid = self.gather_on_r_new
 
         self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
@@ -475,6 +475,7 @@ class PropagatorResamplingFresnel(StepperFresnel):
         else:
             self.Nkr_new = Nkr_new
 
+        self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
         self.init_TST()
 
@@ -487,13 +488,10 @@ class PropagatorResamplingFresnel(StepperFresnel):
         """
         mode = self.mode
         dtype = self.dtype
-
         r_ext = self.r_ext
 
-        Rmax = self.Rmax
         Rmax_ext = self.Rmax_ext
         Nr = self.Nr
-        Nr_ext = self.Nr_ext
 
         Nr_new = self.Nr_new
         Nkr_new = self.Nkr_new
@@ -522,7 +520,15 @@ class PropagatorResamplingFresnel(StepperFresnel):
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
         self.u_ht *= 2 * np.pi
 
+    def get_local_grid(self, dz, ikz):
+        r_loc = dz * self.kr[:self.Nkr_new] / self.kz[ikz]
+        r2_loc = r_loc * r_loc
+        return r_loc,  r2_loc
+
     def check_new_grid(self, dz):
+        if self.r_axis_new is None:
+            self.r_new =  dz * self.kr[:self.Nkr_new] / self.kz[self.kz.size//2]
+
         r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
         if self.r_new.max()>r_loc_min.max():
             Nkr = int(self.r_new.max() / np.diff(r_loc_min).mean())
@@ -531,14 +537,126 @@ class PropagatorResamplingFresnel(StepperFresnel):
                 + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
 
-class PropagatorFFT2Fresnel(PropagatorFFT2, StepperFresnel):
-    def make_r_new(self, Rmax_new, Nr=None):
-        self.Rmax_new = Rmax_new
-        self.r_new = self.r
-        self.r2_new = self.r_new**2
+class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
+    """
+    Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
+    for TST.
+
+    Contains methods to:
+    - setup TST data buffers;
+    - perform a forward FFT;
+    - perform a inverse FFT;
+    """
+
+    def __init__(self, x_axis, y_axis, kz_axis, N_pad=2,
+                 dtype=np.complex128, backend=None,
+                 verbose=True):
+        """
+        Construct the propagator.
+
+        Parameters
+        ----------
+        x_axis: tuple (Lx, Nx)
+          Define the x-axis grid with parameters:
+            Lx: float (m)
+                Full size of the calculation domain along x-axis.
+
+            Nx: int
+                Number of nodes of the x-grid. Better be an odd number,
+                in order to make a symmteric grid.
+
+        y_axis: tuple (Ly, Ny)
+          Define the y-axis grid with parameters:
+            Ly: float (m)
+                Full size of the calculation domain along y-axis.
+
+            Ny: int
+                Number of nodes of the y-grid.Better be an odd number,
+                in order to make a symmteric grid.
+
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
+
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
+
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+
+        backend: string
+            Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
+            list of available options.
+        """
+        self.dtype = dtype
+
+        self.init_backend(backend, verbose)
+        self.init_kz(kz_axis)
+        self.gather_on_new_grid = self.gather_on_xy_new
+
+        Lx, Nx = x_axis
+        Ly, Ny = y_axis
+        self.Nx = Nx
+        self.Ny = Ny
+
+        self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
+        x, y, r, r2 = self.init_xy_uniform( (N_pad*Lx, N_pad*Nx),
+                                            (N_pad*Ly, N_pad*Ny) )
+        self.ix0 = int( np.round( (N_pad-1) * Nx / 2. ) )
+        self.iy0 = int( np.round( (N_pad-1) * Ny / 2. ) )
+
+        self.init_kxy_uniform(x, y, shift=True)
+
+        self.r2 = self.bcknd.to_device(self.r2)
+        self.init_TST()
+
+    def init_TST(self):
+        """
+        Setup data buffers for TST.
+        """
+        Nx_ext = self.kx.size
+        Ny_ext = self.ky.size
+        Nx, Ny = self.r2.shape
+        dtype = self.dtype
+
+        self.shape_trns_new = (Nx_ext, Ny_ext)
+
+        self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)
+        self.u_iht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
+        self.u_ht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
+        self.fft2, self.ifft2 = self.bcknd.make_fft2(self.u_iht, self.u_ht)
+
+    def TST(self):
+        """
+        Forward FFT transform.
+        """
+        self.u_iht[:] = 0.0
+        ix0, iy0, Nx, Ny = self.ix0, self.iy0, self.Nx, self.Ny
+        self.u_iht[ix0 : ix0 + Nx, iy0 : iy0 + Ny] = self.u_loc
+        self.u_ht = self.fft2(self.u_iht, self.u_ht)
+
+        # while testing
+        self.u_ht = self.bcknd.to_host(self.u_ht)
+        self.u_ht = np.fft.fftshift(self.u_ht)
+        self.u_ht = self.bcknd.to_device(self.u_ht)
+
+    def get_local_grid(self, dz, ikz):
+        kz_loc = self.kz[ikz]
+        x_loc = dz * self.kx / kz_loc
+        y_loc = dz * self.ky / kz_loc
+        r_loc = (x_loc, y_loc)
+        r2_loc = x_loc[:, None]**2 + y_loc[None, :]**2
+        return r_loc, r2_loc
 
     def check_new_grid(self, dz):
+        kz_max = self.kz.max()
+        self.x = dz * self.kx / kz_max
+        self.y = dz * self.ky / kz_max
+        self.r_new = (self.x, self.y)
         return
-
-    def gather_on_r_new( self, u_loc, r_loc ):
-        return u_loc

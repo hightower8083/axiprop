@@ -55,7 +55,7 @@ class BACKEND_NP():
 
         return matmul
 
-    def make_fft2(self, vec_in, vec_out, vec_out2):
+    def make_fft2(self, vec_in, vec_out):
         def fft2(a, b):
             b = np.fft.fft2(a, norm="ortho")
             return b
@@ -128,7 +128,7 @@ try:
 
             return matmul
 
-        def make_fft2(self, vec_in, vec_out, vec_out2):
+        def make_fft2(self, vec_in, vec_out):
             fft_reikna = self.FFT(vec_in).compile(self.thrd)
 
             def fft2(a, b):
@@ -181,7 +181,7 @@ try:
 
             return matmul
 
-        def make_fft2(self, vec_in, vec_out, vec_out2):
+        def make_fft2(self, vec_in, vec_out):
             def fft2(a, b):
                 b = self.cp.fft.fft2(a, norm="ortho")
                 return b
@@ -243,7 +243,7 @@ try:
 
             return matmul
 
-        def make_fft2(self, vec_in, vec_out, vec_out2):
+        def make_fft2(self, vec_in, vec_out):
             def fft2(a, b):
                 b = self.af.signal.fft2(a)
                 return b
@@ -268,7 +268,7 @@ try:
         mklfft2 = mkl_fft.fft2
         mklifft2 = mkl_fft.ifft2
 
-        def make_fft2(self, vec_in, vec_out, vec_out2):
+        def make_fft2(self, vec_in, vec_out):
             def fft2(a, b):
                 b = self.mklfft2(a)
                 return b
@@ -291,12 +291,13 @@ try:
 
         name ='NP_FFTW'
 
-        def make_fft2(self, vec_in, vec_out, vec_out2):
+        def make_fft2(self, vec_in, vec_out):
             threads = 6
 
             self.fftw2 = self.pyfftw.FFTW( vec_in, vec_out, axes=(-1,0),
                 direction='FFTW_FORWARD', flags=('FFTW_MEASURE', ), threads=threads)
-            self.ifftw2 = self.pyfftw.FFTW( vec_out, vec_out2, axes=(-1,0),
+            # self.ifftw2 = self.pyfftw.FFTW( vec_out, vec_out2, axes=(-1,0),
+            self.ifftw2 = self.pyfftw.FFTW( vec_out, vec_in, axes=(-1,0),
                 direction='FFTW_BACKWARD', flags=('FFTW_MEASURE', ), threads=threads,
                 normalise_idft=True)
 

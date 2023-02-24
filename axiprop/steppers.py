@@ -5,11 +5,10 @@
 Axiprop base_classes file
 
 This file contains stepper classes of axiprop:
-- StepperNoneParaxial
+- StepperNonParaxial
 - StepperFresnel
 """
 import numpy as np
-from .common import CommonTools
 
 try:
     from tqdm.auto import tqdm
@@ -19,7 +18,7 @@ except Exception:
     tqdm_available = False
 
 
-class StepperNoneParaxial(CommonTools):
+class StepperNonParaxial:
     """
     Class of steppers for non-paraxial propagators. Contains methods to:
     - perform a single-step calculation;
@@ -130,7 +129,7 @@ class StepperNoneParaxial(CommonTools):
 
         return u_steps
 
-class StepperFresnel(CommonTools):
+class StepperFresnel:
     """
     Class of steppers for paraxial propagators. Contains methods to:
     - perform a single-step calculation;
@@ -164,29 +163,23 @@ class StepperFresnel(CommonTools):
         else:
             u_step = u
 
-        r2 = self.bcknd.to_device(self.r**2)
-
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
-
-        if self.r_axis_new is None:
-            self.r_new =  dz * self.kr[:self.Nkr_new] / self.kz[self.kz.size//2]
 
         self.check_new_grid(dz)
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:])
-            self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * r2)
+            self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
             self.TST()
-
-            r_loc = dz * self.kr[:self.Nkr_new] / self.kz[ikz]
-            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * (r_loc*r_loc) / (dz*dz) )
-            coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
-
             u_slice_loc = self.bcknd.to_host(self.u_ht)
+
+            r_loc,  r2_loc = self.get_local_grid(dz, ikz)
+            phase_loc = self.kz[ikz] * dz * (1 + 0.5 * r2_loc / (dz*dz) )
+            coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
             u_slice_loc *= coef_loc * np.exp( 1j * phase_loc )
-            u_slice_loc = self.gather_on_r_new(u_slice_loc, r_loc, self.r_new)
-            u_step[ikz] = u_slice_loc
+            u_slice_loc = self.gather_on_new_grid(u_slice_loc, r_loc, self.r_new)
+            u_step[ikz] = u_slice_loc.copy()
 
             if tqdm_available and show_progress:
                 pbar.update(1)

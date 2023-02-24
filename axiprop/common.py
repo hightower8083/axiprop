@@ -10,7 +10,7 @@ This file contains common classed of axiprop:
 """
 import numpy as np
 from scipy.special import jn, jn_zeros
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, RectBivariateSpline
 import os
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
@@ -99,6 +99,26 @@ class CommonTools:
         self.kr = self.alpha / Rmax
         self.kr2 = self.bcknd.to_device( self.kr**2 )
 
+    def init_kxy_uniform(self, x, y, shift=False):
+        dx = x[1] - x[0]
+        dy = y[1] - y[0]
+        Nx = x.size
+        Ny = y.size
+
+        kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
+        ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
+
+        if shift:
+            kx = np.fft.fftshift(kx)
+            ky = np.fft.fftshift(ky)
+
+        self.kx = kx
+        self.ky = ky
+
+        self.kr2 = kx[:,None]**2 + ky[None,:]**2
+        self.kr = np.sqrt(self.kr2)
+        self.kr2 = self.bcknd.to_device( self.kr2 )
+
     def init_r_sampled(self, r_axis):
         """
         Setup the radial `r` grid from an array
@@ -155,10 +175,9 @@ class CommonTools:
         r += 0.5 * dr
         return r, Rmax, Nr
 
-    def init_xykxy_fft2(self, x_axis, y_axis):
+    def init_xy_uniform(self, x_axis, y_axis):
         """
-        Setup the transverse `x` and `y` and corresponding spectral
-        `kx` and `ky` grids, and fix data type.
+        Setup the transverse `x` and `y` grids
 
         Parameters
         ----------
@@ -183,35 +202,22 @@ class CommonTools:
         Lx, Nx = x_axis
         Ly, Ny = y_axis
 
-        self.Lx = Lx
-        self.Ly = Ly
-        self.Nx = Nx
-        self.Ny = Ny
-
-        self.x = np.linspace(-Lx/2, Lx/2, Nx)
-        self.y = np.linspace(-Ly/2, Ly/2, Ny)
-        dx = self.x[1] - self.x[0]
-        dy = self.y[1] - self.y[0]
+        x = np.linspace(-Lx/2, Lx/2, Nx)
+        y = np.linspace(-Ly/2, Ly/2, Ny)
+        dx = x[1] - x[0]
+        dy = y[1] - y[0]
 
         if Nx==1 and Ny>1:
-            self.x = np.array( [0.0, ] )
+            x = np.array( [0.0, ] )
             dx = dy
 
         if Ny==1 and Nx>1:
-            self.y = np.array( [0.0, ] )
+            y = np.array( [0.0, ] )
             dy = dx
 
-        kx = 2 * np.pi * np.fft.fftfreq(Nx, dx)
-        ky = 2 * np.pi * np.fft.fftfreq(Ny, dy)
-
-        self.r = np.sqrt(self.x[:,None]**2 + self.y[None,:]**2 )
-        self.Nr = self.r.size
-
-        self.kr = np.sqrt(kx[:,None]**2 + ky[None,:]**2)
-        self.kr2 = self.bcknd.to_device( self.kr**2 )
-
-        self.kx = kx # [:,None] * np.ones_like(ky[None,:])
-        self.ky = ky # [:,None] * np.ones_like(ky[None,:])
+        r2 = x[:,None]**2 + y[None,:]**2
+        r = np.sqrt(r2)
+        return x, y, r, r2
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
@@ -226,6 +232,24 @@ class CommonTools:
 
         u_slice_abs = interp_fu_abs(r_new)
         u_slice_angl = interp_fu_angl(r_new)
+
+        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        return u_slice_new
+
+    def gather_on_xy_new( self, u_loc, r_loc, r_new ):
+        x_loc, y_loc = r_loc
+        x_new, y_new = r_new
+
+        interp_fu_abs = RectBivariateSpline(
+             x_loc, y_loc, np.abs(u_loc)
+        )
+
+        interp_fu_angl = RectBivariateSpline(
+            x_loc, y_loc, np.unwrap(np.angle(u_loc))
+        )
+
+        u_slice_abs = interp_fu_abs.ev(x_new, y_new)
+        u_slice_angl = interp_fu_angl.ev(x_new, y_new)
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
         return u_slice_new
