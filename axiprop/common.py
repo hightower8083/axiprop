@@ -11,8 +11,13 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn, jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
-from unwrap import unwrap as unwrap2d
 import os
+
+try:
+    from unwrap import unwrap as unwrap2d
+    unwrap_available = True
+except Exception:
+    unwrap_available = False
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -238,6 +243,9 @@ class CommonTools:
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
+        if not unwrap_available:
+            raise NotImplementedError("install unwarp")
+
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
 
