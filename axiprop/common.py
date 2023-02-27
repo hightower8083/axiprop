@@ -244,7 +244,7 @@ class CommonTools:
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
         if not unwrap_available:
-            raise NotImplementedError("install unwarp")
+            raise NotImplementedError("install unwrap")
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new

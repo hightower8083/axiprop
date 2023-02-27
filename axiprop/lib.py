@@ -457,7 +457,9 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             Rmax = self.r.max()
             self.Rmax = Rmax + 0.5 * dr_est
 
-            self.r_ext = np.r_[ self.r, Rmax + dr_est * np.arange(1, Nr*(N_pad-1))+1 ]
+            self.r_ext = np.r_[ self.r,
+                Rmax + dr_est * np.arange( 1, Nr*(N_pad-1))
+            ]
             self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
             self.Nr_ext = self.r_ext.size
 
@@ -548,9 +550,10 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
     - perform a inverse FFT;
     """
 
-    def __init__(self, x_axis, y_axis, kz_axis, N_pad=2,
-                 dtype=np.complex128, backend=None,
-                 verbose=True):
+    def __init__(self, x_axis, y_axis, kz_axis,
+                 Nx_new=None, Ny_new=None,
+                 N_pad=2, dtype=np.complex128,
+                 backend=None, verbose=True):
         """
         Construct the propagator.
 
@@ -602,35 +605,67 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
         Lx, Nx = x_axis
         Ly, Ny = y_axis
+
+        Lx_ext = N_pad * Lx
+        Ly_ext = N_pad * Ly
+        Nx_ext = N_pad * Nx
+        Ny_ext = N_pad * Ny
+
         self.Nx = Nx
         self.Ny = Ny
+        self.Nx_ext = Nx_ext
+        self.Ny_ext = Ny_ext
         self.dV = Lx/Nx * Ly/Ny
 
+        if Nx_new is None:
+            self.Nx_new = Nx_ext
+        else:
+            if Nx_new <= Nx_ext:
+                self.Nx_new = Nx_new
+            else:
+                warnings.warn("Nx_new>Nx*N_pad will be reduced")
+                self.Nx_new = Nx_ext
+
+        if Ny_new is None:
+            self.Ny_new = Ny_ext
+        else:
+            if Ny_new <= Ny_ext:
+                self.Ny_new = Ny_new
+            else:
+                warnings.warn("Ny_new>Ny*N_pad will be reduced")
+                self.Ny_new = Ny_ext
+
+        self.ix0 = int( np.round( (N_pad - 1) * Nx / 2. ) )
+        self.iy0 = int( np.round( (N_pad - 1) * Ny / 2. ) )
+
         self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
-        x, y, r, r2 = self.init_xy_uniform( (N_pad*Lx, N_pad*Nx),
-                                            (N_pad*Ly, N_pad*Ny) )
-        self.ix0 = int( np.round( (N_pad-1) * Nx / 2. ) )
-        self.iy0 = int( np.round( (N_pad-1) * Ny / 2. ) )
-
-        self.init_kxy_uniform(x, y, shift=True)
-
         self.r2 = self.bcknd.to_device(self.r2)
+
+        x, y, r, r2 = self.init_xy_uniform( (Lx_ext, Nx_ext),
+                                            (Ly_ext, Ny_ext) )
+        self.init_kxy_uniform(x, y, shift=True)
         self.init_TST()
 
     def init_TST(self):
         """
         Setup data buffers for TST.
         """
-        Nx_ext = self.kx.size
-        Ny_ext = self.ky.size
-        Nx, Ny = self.r2.shape
+        Nx = self.Nx
+        Ny = self.Ny
+        Nx_ext = self.Nx_ext
+        Ny_ext = self.Ny_ext
+        Nx_new = self.Nx_new
+        Ny_new = self.Ny_new
         dtype = self.dtype
-        self.shape_trns_new = (Nx, Ny)
 
+        self.shape_trns_new = (Nx_new, Ny_new)
         self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)
+
         self.u_iht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
         self.u_ht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
-        self.fft2, self.ifft2, self.fftshift = self.bcknd.make_fft2(self.u_iht, self.u_ht)
+
+        self.fft2, ifft2, self.fftshift = self.bcknd.make_fft2(
+                                                self.u_iht, self.u_ht)
 
     def TST(self):
         """
@@ -657,8 +692,14 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         return r_loc, r2_loc
 
     def check_new_grid(self, dz):
-        ix0, iy0, Nx, Ny = self.ix0, self.iy0, self.Nx, self.Ny
+        Nx_ext = self.Nx_ext
+        Ny_ext = self.Ny_ext
+        Nx_new = self.Nx_new
+        Ny_new = self.Ny_new
+
+        ix0 = (Nx_ext - Nx_new) // 2
+        iy0 = (Ny_ext - Ny_new) // 2
         kz_max = self.kz.max()
-        self.x = dz * self.kx[ix0 : ix0 + Nx] / kz_max
-        self.y = dz * self.ky[iy0 : iy0 + Ny] / kz_max
+        self.x = dz * self.kx[ix0 : ix0 + Nx_new] / kz_max
+        self.y = dz * self.ky[iy0 : iy0 + Ny_new] / kz_max
         self.r_new = (self.x, self.y)
