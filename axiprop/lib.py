@@ -476,6 +476,8 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.Nkr_new = self.Nr_new
         else:
             self.Nkr_new = Nkr_new
+            if Nkr_new > Nr * N_pad:
+                warnings.warn(f"Nkr_new>Nr*N_pad {Nr*N_pad} has no effect")
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
