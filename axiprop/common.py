@@ -243,11 +243,14 @@ class CommonTools:
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
-        if not unwrap_available:
-            raise NotImplementedError("install unwrap")
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
+        if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
+            return u_loc
+
+        if not unwrap_available:
+            raise NotImplementedError("install unwrap")
 
         interp_fu_abs = RectBivariateSpline(
             x_loc, y_loc, np.abs(u_loc)
