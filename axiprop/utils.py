@@ -10,7 +10,7 @@ import numpy as np
 from scipy.constants import c, e, m_e
 from scipy.interpolate import interp1d
 
-# try import numba and make dummy methods if it is not
+# try import numba and make dummy methods if cannot
 try:
     from numba import njit, prange
     #njit = njit(parallel=True, fastmath=True)
@@ -24,7 +24,7 @@ except Exception:
         return func_wrp
 
 @njit
-def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=2):
+def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
     """
     from scipy.special import binom
     FD_shapes = [ (-1)**(n_order-np.arange(n_order+1)) \
