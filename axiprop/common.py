@@ -12,6 +12,8 @@ import numpy as np
 from scipy.special import jn, jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
 import os
+from scipy.constants import c, e, m_e, epsilon_0
+from scipy.integrate import trapezoid
 
 try:
     from unwrap import unwrap as unwrap2d
@@ -356,3 +358,101 @@ class PropagatorExtras:
             uz[ikz] = self.bcknd.to_host(self.u_iht)
 
         return uz
+
+
+class ScalarField:
+    def __init__(self, k0, bandwidth, t_range, dt, n_dump=4,
+                 dtype_ft=np.complex128, dtype=np.double ):
+        self.dtype = dtype
+        self.dtype_ft = dtype_ft
+        self.t_loc = 0
+        self.k0 = k0
+        self.omega0 = k0 * c
+        self.t_range = t_range
+        self.dt = dt
+        self.cdt = c * dt
+
+        self.t = np.arange(*t_range, dt)
+        if np.mod(self.t.size, 2) == 1:
+            self.t = self.t[:-1]
+        self.Nt = self.t.size
+
+        self.Nk_freq_full = self.Nt
+        self.k_freq_full = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)
+        self.band_mask = np.abs(self.k_freq_full+k0)<bandwidth
+
+        self.k_freq = np.abs(self.k_freq_full[self.band_mask])
+        self.Nk_freq = self.k_freq.size
+        self.omega = self.k_freq * c
+
+        self.n_dump = n_dump
+        self.dump_mask = np.cos(np.r_[0 : np.pi/2 : n_dump*1j])**0.5
+        self.dump_mask[-1] = 0.0
+
+    def make_gaussian_pulse(self, a0, tau, r, R_las, t0=0, phi0=0, n_ord=2, omega0=None):
+        self.r_shape = r.shape
+        t = self.t
+        self.r = r.copy()
+
+        if omega0 is None:
+            omega0 = self.omega0
+
+        profile_r = np.exp( -( r/R_las )**n_ord )
+        profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.cos(omega0 * t + phi0)
+
+        profile_r[-self.n_dump:] *= self.dump_mask
+        profile_t[-self.n_dump:] *= self.dump_mask
+        profile_t[:self.n_dump] *= self.dump_mask[::-1]
+
+        self.E0 = a0 * m_e * c * omega0 / e
+        self.Field = self.E0 * profile_t[:, None] * profile_r[None, :]
+
+        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape), dtype=self.dtype_ft)
+        self.time_to_frequency()
+        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
+        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
+
+    @property
+    def Energy(self):
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        Energy = 2 * np.pi * epsilon_0 * trapezoid(
+            trapezoid(self.Field**2 * self.r, self.r), c * self.t
+        )
+        return Energy
+
+    def import_field(self, A, t_loc=None, r=None):
+        if t_loc is not None:
+            self.t_loc = t_loc
+
+        if r is not None:
+            self.r = r
+        self.Field = A.copy()
+        self.r_shape = A[0].shape
+        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape), dtype=self.dtype_ft)
+        self.time_to_frequency()
+        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
+        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
+
+    def import_field_ft(self, A, t_loc=0, r=None):
+        self.t_loc = t_loc
+        if r is not None:
+            self.r = r
+        self.r_shape = A[0].shape
+        self.Field_ft = A.copy()
+        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
+        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
+        self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
+        self.frequency_to_time()
+
+    def time_to_frequency(self):
+        self.Field_ft[:] = np.fft.fft(self.Field, axis=0)[self.band_mask,:]
+        self.Field_ft *= np.exp(1j * self.k_freq[:,None] * c * self.t_loc)
+
+    def frequency_to_time(self):
+        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq[:,None] * c * self.t_loc)
+        Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape), dtype=self.dtype_ft)
+        Field_ft_full[self.band_mask, :] = Field_ft
+        self.Field[:] = 2 * np.fft.ifft(Field_ft_full, axis=0).real
