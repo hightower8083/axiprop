@@ -43,6 +43,9 @@ class BACKEND_NP():
     inv_sqr_on_host = inv_sqr_on_host
     inv = inv_on_host
 
+    def where(self, condition, ar1, ar2):
+        return ( np.where(condition, ar1, ar2) )
+
     def to_host(self, arr_in):
         return arr_in
 
@@ -168,6 +171,9 @@ try:
         abs = cp.abs
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
+
+        def where(self, condition, ar1, ar2):
+            return ( self.cp.where(condition, ar1, ar2) )
 
         def to_host(self, arr_in):
             arr_out = self.cp.asnumpy(arr_in)

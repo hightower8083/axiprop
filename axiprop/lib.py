@@ -16,8 +16,9 @@ from scipy.special import jn
 import warnings
 
 from .common import CommonTools
-from .steppers import StepperNonParaxial
 from .steppers import StepperFresnel
+from .steppers import StepperNonParaxial
+from .steppers import StepperNonParaxialPlasma
 
 
 class PropagatorSymmetric(CommonTools, StepperNonParaxial):
@@ -705,3 +706,6 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.x = dz * self.kx[ix0 : ix0 + Nx_new] / kz_max
         self.y = dz * self.ky[iy0 : iy0 + Ny_new] / kz_max
         self.r_new = (self.x, self.y)
+
+class PropagatorResamplingPlasma(PropagatorResampling, StepperNonParaxialPlasma):
+    pass

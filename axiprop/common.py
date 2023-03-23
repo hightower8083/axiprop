@@ -278,61 +278,6 @@ class PropagatorExtras:
         u[:, -nr_boundary:] *= absorb_layer_shape
         return u
 
-    def initiate_stepping(self, u):
-        """
-        Initiate the stepped propagation mode. This mode allows computation
-        of the consequent steps with access to the result on each step.
-        In contrast to `step` can operate the `PropagatorResampling` class.
-
-        Parameters
-        ----------
-        u: 2darray of complex or double
-            Spectral-radial distribution of the field to be propagated.
-        """
-        assert u.dtype == self.dtype
-
-        self.stepping_image = self.bcknd.to_device( np.zeros_like(u) )
-        self.phase_loc = self.bcknd.to_device( np.zeros_like(u) )
-        self.z_propagation = 0.0
-
-        for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:])
-            self.TST()
-
-            self.stepping_image[ikz] = self.u_ht.copy()
-
-            phase_loc = self.kz[ikz]**2 - self.kr2
-            self.phase_loc[ikz] = self.bcknd.sqrt((phase_loc >= 0.)*phase_loc)
-
-    def stepping(self, dz, u_out=None):
-        """
-        Perform a step in the stepped propagation mode. This mode allows computation
-        of the consequent steps with access to the result on each step.
-        In contrast to `step` can operate the `PropagatorResampling` class.
-
-        Parameters
-        ----------
-        dz: float (m)
-            Step over which wave should be propagated.
-
-        u_out: 2darray of complex or double (optional)
-            Array to which data should be written.
-            If not provided will be allocated.
-        """
-        if u_out is None:
-            u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=self.dtype)
-
-        for ikz in range(self.Nkz):
-            self.stepping_image[ikz] *= self.bcknd.exp( \
-                1j * dz * self.phase_loc[ikz] )
-            self.u_ht = self.stepping_image[ikz].copy()
-            self.iTST()
-            u_out[ikz] = self.bcknd.to_host(self.u_iht)
-
-        self.z_propagation += dz
-        return u_out
-
     def get_Ez(self, ux):
         """
         Get a longitudinal field component from the transverse field using the
@@ -361,7 +306,7 @@ class PropagatorExtras:
 
 
 class ScalarField:
-    def __init__(self, k0, bandwidth, t_range, dt, n_dump=4,
+    def __init__(self, k0, bandwidth, t_range, dt, n_dump=16,
                  dtype_ft=np.complex128, dtype=np.double ):
         self.dtype = dtype
         self.dtype_ft = dtype_ft
@@ -384,12 +329,14 @@ class ScalarField:
         self.k_freq = np.abs(self.k_freq_full[self.band_mask])
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
+        self.band_filt = np.exp( - (3*(self.k_freq-k0)**2 / bandwidth**2)**8 )
 
         self.n_dump = n_dump
         self.dump_mask = np.cos(np.r_[0 : np.pi/2 : n_dump*1j])**0.5
         self.dump_mask[-1] = 0.0
 
-    def make_gaussian_pulse(self, a0, tau, r, R_las, t0=0, phi0=0, n_ord=2, omega0=None):
+    def make_gaussian_pulse(self, a0, tau, r, R_las,
+                            t0=0, phi0=0, n_ord=2, omega0=None):
         self.r_shape = r.shape
         t = self.t
         self.r = r.copy()
@@ -407,10 +354,9 @@ class ScalarField:
         self.E0 = a0 * m_e * c * omega0 / e
         self.Field = self.E0 * profile_t[:, None] * profile_r[None, :]
 
-        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape), dtype=self.dtype_ft)
+        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
+                                 dtype=self.dtype_ft)
         self.time_to_frequency()
-        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
-        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
 
     @property
     def Energy(self):
@@ -423,36 +369,44 @@ class ScalarField:
         )
         return Energy
 
-    def import_field(self, A, t_loc=None, r=None):
+    def import_field(self, A, t_loc=None, r=None,
+                     transform=True, do_filter=False):
         if t_loc is not None:
             self.t_loc = t_loc
 
         if r is not None:
             self.r = r
-        self.Field = A.copy()
-        self.r_shape = A[0].shape
-        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape), dtype=self.dtype_ft)
-        self.time_to_frequency()
-        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
-        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
 
-    def import_field_ft(self, A, t_loc=0, r=None):
+        self.Field = A.copy()
+        self.Field[:,-self.n_dump:] *= self.dump_mask[None,:]
+        self.Field[-self.n_dump:] *= self.dump_mask[:,None]
+        self.Field[:self.n_dump] *= self.dump_mask[::-1][:,None]
+        self.r_shape = A[0].shape
+        if transform:
+            self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
+                                     dtype=self.dtype_ft)
+            self.time_to_frequency()
+            if do_filter:
+                self.Field_ft *= self.band_filt[:,None]
+
+    def import_field_ft(self, A, t_loc=0, r=None, transform=True):
         self.t_loc = t_loc
         if r is not None:
             self.r = r
         self.r_shape = A[0].shape
         self.Field_ft = A.copy()
-        self.Field_ft[-self.n_dump:] *= self.dump_mask[:, None]
-        self.Field_ft[:self.n_dump] *= self.dump_mask[::-1][:, None]
-        self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
-        self.frequency_to_time()
+        if transform:
+            self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
+            self.frequency_to_time()
 
     def time_to_frequency(self):
         self.Field_ft[:] = np.fft.fft(self.Field, axis=0)[self.band_mask,:]
         self.Field_ft *= np.exp(1j * self.k_freq[:,None] * c * self.t_loc)
 
     def frequency_to_time(self):
-        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq[:,None] * c * self.t_loc)
-        Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape), dtype=self.dtype_ft)
+        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq[:,None] \
+            * c * self.t_loc)
+        Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
+                                 dtype=self.dtype_ft)
         Field_ft_full[self.band_mask, :] = Field_ft
         self.Field[:] = 2 * np.fft.ifft(Field_ft_full, axis=0).real
