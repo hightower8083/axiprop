@@ -309,7 +309,7 @@ class PropagatorExtras:
 
 
 class ScalarField:
-    def __init__(self, k0, bandwidth, t_range, dt, n_dump=16,
+    def __init__(self, k0, bandwidth, t_range, dt, n_dump=4,
                  dtype_ft=np.complex128, dtype=np.double ):
         self.dtype = dtype
         self.dtype_ft = dtype_ft
@@ -332,7 +332,7 @@ class ScalarField:
         self.k_freq = np.abs(self.k_freq_full[self.band_mask])
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
-        self.band_filt = np.exp( - (3*(self.k_freq-k0)**2 / bandwidth**2)**8 )
+        self.band_filt = np.exp( - ( 2 * np.abs(self.k_freq-k0) / bandwidth )**8 )
 
         self.n_dump = n_dump
         self.dump_mask = np.cos(np.r_[0 : np.pi/2 : n_dump*1j])**0.5
@@ -348,14 +348,25 @@ class ScalarField:
             omega0 = self.omega0
 
         profile_r = np.exp( -( r/R_las )**n_ord )
-        profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.cos(omega0 * t + phi0)
+        profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.sin(omega0 * t + phi0)
 
-        profile_r[-self.n_dump:] *= self.dump_mask
         profile_t[-self.n_dump:] *= self.dump_mask
         profile_t[:self.n_dump] *= self.dump_mask[::-1]
 
+        if len(profile_r.shape) == 1:
+            profile_r[-self.n_dump:] *= self.dump_mask
+            profile_t = profile_t[:, None]
+            self.k_freq_shaped = self.k_freq[:, None]
+        elif len(profile_r.shape) == 2:
+            profile_t = profile_t[:, None, None]
+            self.k_freq_shaped = self.k_freq[:, None, None]
+            profile_t[-self.n_dump:, :] *= self.dump_mask[:, None]
+            profile_t[:self.n_dump, :] *= self.dump_mask[::-1][:, None]
+            profile_r[:,-self.n_dump:] *= self.dump_mask[None,:]
+            profile_r[:,:self.n_dump] *= self.dump_mask[::-1][None,:]
+
         self.E0 = a0 * m_e * c * omega0 / e
-        self.Field = self.E0 * profile_t[:, None] * profile_r[None, :]
+        self.Field = self.E0 * profile_t * profile_r[None, :]
 
         self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
                                  dtype=self.dtype_ft)
@@ -380,34 +391,42 @@ class ScalarField:
         if r is not None:
             self.r = r
 
+        if len(A[0].shape)==1:
+            self.k_freq_shaped = self.k_freq[:, None]
+        elif len(A[0].shape)==2:
+            self.k_freq_shaped = self.k_freq[:, None, None]
+
         self.Field = A.copy()
-        self.Field[:,-self.n_dump:] *= self.dump_mask[None,:]
-        self.Field[-self.n_dump:] *= self.dump_mask[:,None]
-        self.Field[:self.n_dump] *= self.dump_mask[::-1][:,None]
         self.r_shape = A[0].shape
         if transform:
             self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
                                      dtype=self.dtype_ft)
             self.time_to_frequency()
-            if do_filter:
-                self.Field_ft *= self.band_filt[:,None]
+            self.Field_ft[:,-self.n_dump:] *= self.dump_mask[None,:]
 
     def import_field_ft(self, A, t_loc=0, r=None, transform=True):
         self.t_loc = t_loc
         if r is not None:
             self.r = r
+
         self.r_shape = A[0].shape
         self.Field_ft = A.copy()
+
+        if len(A[0].shape)==1:
+            self.k_freq_shaped = self.k_freq[:, None]
+        elif len(A[0].shape)==2:
+            self.k_freq_shaped = self.k_freq[:, None, None]
+
         if transform:
             self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
             self.frequency_to_time()
 
     def time_to_frequency(self):
         self.Field_ft[:] = np.fft.fft(self.Field, axis=0)[self.band_mask,:]
-        self.Field_ft *= np.exp(1j * self.k_freq[:,None] * c * self.t_loc)
+        self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
 
     def frequency_to_time(self):
-        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq[:,None] \
+        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq_shaped \
             * c * self.t_loc)
         Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
                                  dtype=self.dtype_ft)

@@ -50,7 +50,7 @@ def get_ADK_probability(E_fld, dt, adk_power, \
     return Propab
 
 @njit #(parallel=True)
-def get_plasma_OFI(E_laser, A_laser, dt, n_gas, pack_ADK, Uion, Zmax=-1):
+def get_plasma_OFI(E_laser, A_laser, dt, n_gas, pack_ADK, Uion, Z_init=0, Zmax=-1):
 
     num_ions = pack_ADK[0].size + 1
     Nt, Nr = E_laser.shape
@@ -73,7 +73,7 @@ def get_plasma_OFI(E_laser, A_laser, dt, n_gas, pack_ADK, Uion, Zmax=-1):
         Jt = np.zeros_like(E_loc)
 
         ion_fracts_loc = np.zeros(num_ions)
-        ion_fracts_loc[0] = 1.
+        ion_fracts_loc[Z_init] = 1.
 
         electron_temp_dens = 0
         all_new_events = 0
@@ -93,10 +93,10 @@ def get_plasma_OFI(E_laser, A_laser, dt, n_gas, pack_ADK, Uion, Zmax=-1):
 
                     all_new_events += new_events
                     electron_temp_dens += Wth_loc[it] * new_events
-
-                    J_ion = n_gas_loc * new_events * Uion[ion_state] * e / E_loc[it] / dt
-                    Jt[it] += J_ion
-                    Jt[it:] += -n_gas_loc * new_events * e * c * (beta_loc[it:] - beta_loc[it])
+                    # J_ion = n_gas_loc * new_events * Uion[ion_state] * e / E_loc[it] / dt
+                    # Jt[it] += J_ion
+                    n_e_loc = (Z_init + new_events) * n_gas_loc
+                    Jt[it:] += -e * n_e_loc * c * (beta_loc[it:] - beta_loc[it])
 
         if all_new_events>0:
             T_e[ir] = electron_temp_dens/all_new_events
@@ -111,8 +111,5 @@ def get_plasma_OFI(E_laser, A_laser, dt, n_gas, pack_ADK, Uion, Zmax=-1):
 def get_plasma_ionized(E_laser, A_laser, dt, n_pe):
     U_loc = e / (m_e * c) * A_laser.copy()
     Gamma_loc = np.sqrt( 1.0 + U_loc * U_loc )
-    #beta_loc = U_loc / Gamma_loc
-    #J_plasma = e * n_pe[None,:] * c * beta_loc
-    J_plasma = e * n_pe[None,:] * c * e / (m_e * c) * A_laser.copy() #/ Gamma_loc
-    print(Gamma_loc.max())
+    J_plasma = e * n_pe[None, :] * c * U_loc / Gamma_loc
     return J_plasma, n_pe, np.zeros_like(n_pe)
