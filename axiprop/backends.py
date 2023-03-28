@@ -43,8 +43,9 @@ class BACKEND_NP():
     inv_sqr_on_host = inv_sqr_on_host
     inv = inv_on_host
 
-    def where(self, condition, ar1, ar2):
-        return ( np.where(condition, ar1, ar2) )
+    def divide_or_set_to_one(self, ar1, ar2, condition):
+        result = np.where(condition, np.divide(ar1, ar2, where=condition), 1.0)
+        return result
 
     def to_host(self, arr_in):
         return arr_in
@@ -172,8 +173,8 @@ try:
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
 
-        def where(self, condition, ar1, ar2):
-            return ( self.cp.where(condition, ar1, ar2) )
+        def divide_or_set_to_one(self, ar1, ar2, condition):
+            return ( self.cp.where(condition, ar1/ar2, 1.0) )
 
         def to_host(self, arr_in):
             arr_out = self.cp.asnumpy(arr_in)
@@ -212,7 +213,7 @@ try:
                 return b
 
             return fft2, ifft2, fftshift
-            
+
     AVAILABLE_BACKENDS['CU'] = BACKEND_CU
 except Exception:
     pass
@@ -329,7 +330,6 @@ try:
 
             self.fftw2 = self.pyfftw.FFTW( vec_in, vec_out, axes=(-1,0),
                 direction='FFTW_FORWARD', flags=('FFTW_MEASURE', ), threads=threads)
-            # self.ifftw2 = self.pyfftw.FFTW( vec_out, vec_out2, axes=(-1,0),
             self.ifftw2 = self.pyfftw.FFTW( vec_out, vec_in, axes=(-1,0),
                 direction='FFTW_BACKWARD', flags=('FFTW_MEASURE', ), threads=threads,
                 normalise_idft=True)

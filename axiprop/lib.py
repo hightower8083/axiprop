@@ -709,3 +709,6 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
 class PropagatorResamplingPlasma(PropagatorResampling, StepperNonParaxialPlasma):
     pass
+
+class PropagatorSymmerticPlasma(PropagatorSymmetric, StepperNonParaxialPlasma):
+    pass

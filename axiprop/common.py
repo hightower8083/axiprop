@@ -335,8 +335,8 @@ class ScalarField:
         self.band_filt = np.exp( - ( 2 * np.abs(self.k_freq-k0) / bandwidth )**8 )
 
         self.n_dump = n_dump
-        self.dump_mask = np.cos(np.r_[0 : np.pi/2 : n_dump*1j])**0.5
-        self.dump_mask[-1] = 0.0
+        dump_r = np.linspace(0, 1, n_dump)
+        self.dump_mask = ( 1 - np.exp(-(2*dump_r)**3) )[::-1]
 
     def make_gaussian_pulse(self, a0, tau, r, R_las,
                             t0=0, phi0=0, n_ord=2, omega0=None):
@@ -383,6 +383,16 @@ class ScalarField:
         )
         return Energy
 
+    def apply_boundary_ft(self, A):
+        if len(A[0].shape)==1:
+            A[:,-self.n_dump:] *= self.dump_mask[None,:]
+        elif len(A[0].shape)==2:
+            A[:,:self.n_dump,:] = self.dump_mask[::-1][None,:,None]
+            A[:,:,:self.n_dump] = self.dump_mask[::-1][None,None,:]
+            A[:,-self.n_dump:,:] = self.dump_mask[None,:,None]
+            A[:,:,-self.n_dump:] = self.dump_mask[None,None,:]
+        return A
+
     def import_field(self, A, t_loc=None, r=None,
                      transform=True, do_filter=False):
         if t_loc is not None:
@@ -402,7 +412,7 @@ class ScalarField:
             self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
                                      dtype=self.dtype_ft)
             self.time_to_frequency()
-            self.Field_ft[:,-self.n_dump:] *= self.dump_mask[None,:]
+            self.apply_boundary_ft(self.Field_ft)
 
     def import_field_ft(self, A, t_loc=0, r=None, transform=True):
         self.t_loc = t_loc
