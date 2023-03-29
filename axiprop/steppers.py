@@ -284,10 +284,10 @@ class StepperNonParaxialPlasma:
         for ikz in range(self.Nkz):
 
             phase_term = self.kz[ikz]**2 - self.kr2 - kp2
-            phase_term_abs = self.bcknd.abs(phase_term)
             phase_term_mask = (phase_term>0.0)
-            phase_term = self.bcknd.sqrt(phase_term_abs)
-            phase_term *= phase_term_mask
+            phase_term = self.bcknd.sqrt(
+                self.bcknd.abs(phase_term) * phase_term_mask
+            )
             self.stepping_image[ikz] *= self.bcknd.exp(1j * dz * phase_term)
 
             self.u_ht[:] = self.stepping_image[ikz].copy()
@@ -320,10 +320,8 @@ class StepperNonParaxialPlasma:
         for ikz in range(self.Nkz):
 
             phase_term = self.kz[ikz]**2 - self.kr2 - kp2
-            phase_term_abs = self.bcknd.abs(phase_term)
             phase_term_mask = (phase_term>0.0)
-
-            phase_term = self.bcknd.sqrt(phase_term_abs)
+            phase_term = self.bcknd.sqrt(self.bcknd.abs(phase_term))
             k_ll_inv = phase_term_mask / phase_term
             phase_term *= phase_term_mask
 

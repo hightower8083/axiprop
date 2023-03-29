@@ -325,14 +325,13 @@ class ScalarField:
             self.t = self.t[:-1]
         self.Nt = self.t.size
 
-        self.Nk_freq_full = self.Nt
-        self.k_freq_full = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)
-        self.band_mask = np.abs(self.k_freq_full+k0)<bandwidth
+        self.Nk_freq_full = self.Nt // 2 + 1
+        self.k_freq_full = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)[:self.Nk_freq_full]
+        self.band_mask = np.abs(self.k_freq_full-k0)<bandwidth
 
-        self.k_freq = np.abs(self.k_freq_full[self.band_mask])
+        self.k_freq = self.k_freq_full[self.band_mask]
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
-        self.band_filt = np.exp( - ( 2 * np.abs(self.k_freq-k0) / bandwidth )**8 )
 
         self.n_dump = n_dump
         dump_r = np.linspace(0, 1, n_dump)
@@ -432,7 +431,8 @@ class ScalarField:
             self.frequency_to_time()
 
     def time_to_frequency(self):
-        self.Field_ft[:] = np.fft.fft(self.Field, axis=0)[self.band_mask,:]
+        self.Field_ft[:] = np.fft.rfft(self.Field, axis=0)[self.band_mask]
+        self.Field_ft = np.conjugate( self.Field_ft )
         self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
 
     def frequency_to_time(self):
@@ -440,5 +440,5 @@ class ScalarField:
             * c * self.t_loc)
         Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
                                  dtype=self.dtype_ft)
-        Field_ft_full[self.band_mask, :] = Field_ft
-        self.Field[:] = 2 * np.fft.ifft(Field_ft_full, axis=0).real
+        Field_ft_full[self.band_mask, :] = np.conjugate( Field_ft )
+        self.Field[:] = np.fft.irfft(Field_ft_full, axis=0)
