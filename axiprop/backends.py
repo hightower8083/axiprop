@@ -104,7 +104,7 @@ try:
             return arr_out
 
         def to_device(self, arr_in, dtype=None):
-            arr_out = self.thrd.to_device(arr_in)
+            arr_out = self.thrd.to_device(np.ascontiguousarray(arr_in))
             return arr_out
 
         def zeros(self, shape, dtype):
