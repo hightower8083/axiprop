@@ -372,6 +372,18 @@ class ScalarField:
         self.time_to_frequency()
 
     @property
+    def Energy_ft(self):
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+            ( np.abs(self.Field_ft/self.Nt)**2 ).sum(0) * self.r, self.r
+        )
+
+        return Energy
+
+    @property
     def Energy(self):
         if not hasattr(self, 'r'):
             print('provide r-axis')
@@ -381,6 +393,7 @@ class ScalarField:
             trapezoid(self.Field**2 * self.r, self.r), c * self.t
         )
         return Energy
+
 
     def apply_boundary_ft(self, A):
         if len(A[0].shape)==1:
@@ -408,8 +421,6 @@ class ScalarField:
         self.Field = A.copy()
         self.r_shape = A[0].shape
         if transform:
-            self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
-                                     dtype=self.dtype_ft)
             self.time_to_frequency()
             self.apply_boundary_ft(self.Field_ft)
 
@@ -427,10 +438,13 @@ class ScalarField:
             self.k_freq_shaped = self.k_freq[:, None, None]
 
         if transform:
-            self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
             self.frequency_to_time()
 
     def time_to_frequency(self):
+        if not hasattr(self, 'Field_ft'):
+            self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
+                                     dtype=self.dtype_ft)
+
         self.Field_ft[:] = np.fft.rfft(self.Field, axis=0)[self.band_mask]
         self.Field_ft = np.conjugate( self.Field_ft )
         self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
@@ -440,5 +454,42 @@ class ScalarField:
             * c * self.t_loc)
         Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
                                  dtype=self.dtype_ft)
-        Field_ft_full[self.band_mask, :] = np.conjugate( Field_ft )
+        Field_ft_full[self.band_mask] = np.conjugate( Field_ft )
+        if not hasattr(self, 'Field'):
+            self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
+
         self.Field[:] = np.fft.irfft(Field_ft_full, axis=0)
+
+    def get_temporal_slice(self, ix=None, iy=None, ir=None):
+        shape_tr = self.Field_ft[0].shape
+
+        if len(shape_tr) == 1:
+            if ir is None:
+                ir = 0
+            Field_ft = self.Field_ft[:, ir].copy()
+            Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+
+        if len(shape_tr) == 2:
+            Nx, Ny = shape_tr
+            if ix is None and iy is None:
+                ix = Nx // 2 - 1
+                iy = Ny // 2 - 1
+                Field_ft = self.Field_ft[:, ix, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+            elif ix is None and iy==":":
+                ix = Nx // 2 - 1
+                Field_ft = self.Field_ft[:, ix, :].copy()
+                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+            elif ix is ":" and iy is None:
+                iy = Ny // 2 - 1
+                Field_ft = self.Field_ft[:, :, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+            else:
+                Field_ft = self.Field_ft[:, ix, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+
+        Field_ft_full = np.zeros((self.Nk_freq_full, *Field_ft[0].shape),
+                                 dtype=self.dtype_ft)
+        Field_ft_full[self.band_mask] = np.conjugate( Field_ft )
+        Field = np.fft.irfft(Field_ft_full, axis=0)
+        return Field
