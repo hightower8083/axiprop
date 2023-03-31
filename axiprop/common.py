@@ -309,8 +309,32 @@ class PropagatorExtras:
 
 
 class ScalarField:
+    """
+    A class to initialize and transform the optical field between temporal
+    and frequency domains.
+    """
     def __init__(self, k0, bandwidth, t_range, dt, n_dump=4,
                  dtype_ft=np.complex128, dtype=np.double ):
+        """
+        Initialize the container for the field.
+
+        Parameters
+        ----------
+        k0: float (m^-1)
+          Central wavenumber for the spectral grid
+
+        bandwidth: float (m^-1)
+            Width of the spectral grid
+
+        t_range: tuple of floats (t0, t1) (s)
+            Range of the initial temporal domain
+
+        dt: float (s)
+            Time-step to resolve the temporal domain
+
+        n_dump: int
+            Number of cells to be used for attenuating boundaries
+        """
         self.dtype = dtype
         self.dtype_ft = dtype_ft
         self.t_loc = 0
@@ -339,6 +363,32 @@ class ScalarField:
 
     def make_gaussian_pulse(self, a0, tau, r, R_las,
                             t0=0, phi0=0, n_ord=2, omega0=None):
+        """
+        Initialize the Gaussian pulse
+
+        Parameters
+        ----------
+        a0: float
+          Normalized amplitude of the pulse
+
+        tau: float (s)
+            Duration of the pulse (FBPIC definition)
+
+        r: float ndarray (m)
+            Radial grid for the container
+
+        t0: float (s)
+            Time corresponding the peak field
+
+        phi0: float (rad)
+            Carrier envelop phase (CEP)
+
+        n_ord: int
+            Order of Gaussian profile of TEM
+
+        omega0: float (s^-1)
+            central frequency of the pulse
+        """
         self.r_shape = r.shape
         t = self.t
         self.r = r.copy()
@@ -373,6 +423,11 @@ class ScalarField:
 
     @property
     def Energy_ft(self):
+        """
+        Calculate total energy of the field from the spectral image
+        assuming it to correspond to the electric component, and all values
+        being defined in SI units.
+        """
         if not hasattr(self, 'r'):
             print('provide r-axis')
             return None
@@ -385,6 +440,12 @@ class ScalarField:
 
     @property
     def Energy(self):
+        """
+        Calculate total energy of the field from the temporal distribution
+        assuming it to correspond to the electric component, and all values
+        being defined in SI units. This method is typically much slower than
+        `Energy_ft` but may have a bit higher precision.
+        """
         if not hasattr(self, 'r'):
             print('provide r-axis')
             return None
@@ -396,6 +457,15 @@ class ScalarField:
 
 
     def apply_boundary_ft(self, A):
+        """
+        Attenuate the given field at the transverse boundaries
+
+        Parameters
+        ----------
+        A: float ndarray
+            Some field of the same dimensions as the main
+            field of the container
+        """
         if len(A[0].shape)==1:
             A[:,-self.n_dump:] *= self.dump_mask[None,:]
         elif len(A[0].shape)==2:
@@ -406,7 +476,25 @@ class ScalarField:
         return A
 
     def import_field(self, A, t_loc=None, r=None,
-                     transform=True, do_filter=False):
+                     transform=True):
+        """
+        Import the field from the temporal domain
+
+        Parameters
+        ----------
+        A: float ndarray
+          The field  to be imported of the same dimensions
+          as the main field of the container
+
+        t_loc: float (s)
+            Local time for the field to be considered in frequency space
+
+        r: float ndarray (m)
+            Radial grid for the container
+
+        transform: bool
+            Wether to transform the field to the frequency domain
+        """
         if t_loc is not None:
             self.t_loc = t_loc
 
@@ -425,6 +513,24 @@ class ScalarField:
             self.apply_boundary_ft(self.Field_ft)
 
     def import_field_ft(self, A, t_loc=0, r=None, transform=True):
+        """
+        Import the field from the frequency domain
+
+        Parameters
+        ----------
+        A: float ndarray
+          The field  to be imported of the same dimensions
+          as the main field of the container (the frequency domain)
+
+        t_loc: float (s)
+            Local time for the field to be considered in frequency space
+
+        r: float ndarray (m)
+            Radial grid for the container
+
+        transform: bool
+            Wether to transform the field to the temporal domain
+        """
         self.t_loc = t_loc
         if r is not None:
             self.r = r
@@ -441,6 +547,9 @@ class ScalarField:
             self.frequency_to_time()
 
     def time_to_frequency(self):
+        """
+        Transform the field from temporal to the frequency domain
+        """
         if not hasattr(self, 'Field_ft'):
             self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
                                      dtype=self.dtype_ft)
@@ -450,6 +559,9 @@ class ScalarField:
         self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
 
     def frequency_to_time(self):
+        """
+        Transform the field from frequency to the temporal domain
+        """
         Field_ft = self.Field_ft * np.exp(-1j * self.k_freq_shaped \
             * c * self.t_loc)
         Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
@@ -461,6 +573,28 @@ class ScalarField:
         self.Field[:] = np.fft.irfft(Field_ft_full, axis=0)
 
     def get_temporal_slice(self, ix=None, iy=None, ir=None):
+        """
+        Get a slice or linout of the field in the temporal domain
+        performing FFT only for the selected points
+
+        Parameters
+        ----------
+        ix: int or ":" or None
+          If integer is used as x-slice coordinate for 3D field.
+          If None (default) corresponds to the center of the screen.
+          Can also be ":" which selects all, i.e. 2D slice in TX plane.
+          In the case ":", `iy` must be either intereger or None.
+
+        iy: int or ":" or None
+          If integer is used as y-slice coordinate for 3D field.
+          If None (default) corresponds to the center of the screen.
+          Can also be ":" which selects all, i.e. 2D slice in TY plane.
+          In the case ":", `ix` must be either intereger or None.
+
+        ir: int or None
+          If integer is used as r-slice coordinate for RT field.
+          If None (default) corresponds to the center of the screen.
+        """
         shape_tr = self.Field_ft[0].shape
 
         if len(shape_tr) == 1:
@@ -476,13 +610,15 @@ class ScalarField:
                 iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, ix, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
-            elif ix is None and iy==":":
-                ix = Nx // 2 - 1
-                Field_ft = self.Field_ft[:, ix, :].copy()
-                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
-            elif ix is ":" and iy is None:
-                iy = Ny // 2 - 1
+            elif ix is ":":
+                if iy is None:
+                    iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, :, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+            elif iy==":":
+                if ix is None:
+                    ix = Nx // 2 - 1
+                Field_ft = self.Field_ft[:, ix, :].copy()
                 Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
             else:
                 Field_ft = self.Field_ft[:, ix, iy].copy()

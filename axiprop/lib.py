@@ -10,6 +10,8 @@ This file contains main propagators of axiprop:
 - PropagatorFFT2
 - PropagatorResamplingFresnel
 - PropagatorFFT2Fresnel
+- PropagatorResamplingPlasma
+- PropagatorSymmerticPlasma
 """
 import numpy as np
 from scipy.special import jn
@@ -707,8 +709,18 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.y = dz * self.ky[iy0 : iy0 + Ny_new] / kz_max
         self.r_new = (self.x, self.y)
 
-class PropagatorResamplingPlasma(PropagatorResampling, StepperNonParaxialPlasma):
+class PropagatorResamplingPlasma(
+    PropagatorResampling, StepperNonParaxialPlasma):
+    """
+    A propagator with account for plasma response,
+    based on `PropagatorResampling`
+    """
     pass
 
-class PropagatorSymmerticPlasma(PropagatorSymmetric, StepperNonParaxialPlasma):
+class PropagatorSymmerticPlasma(
+    PropagatorSymmetric, StepperNonParaxialPlasma):
+    """
+    A propagator with account for plasma response,
+    based on `PropagatorSymmetric`
+    """
     pass
