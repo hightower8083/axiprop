@@ -480,7 +480,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         else:
             self.Nkr_new = Nkr_new
             if Nkr_new > Nr * N_pad:
-                warnings.warn(f"Nkr_new>Nr*N_pad {Nr*N_pad} has no effect")
+                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*N_pad} has no effect")
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
@@ -717,7 +717,7 @@ class PropagatorResamplingPlasma(
     """
     pass
 
-class PropagatorSymmerticPlasma(
+class PropagatorSymmetricPlasma(
     PropagatorSymmetric, StepperNonParaxialPlasma):
     """
     A propagator with account for plasma response,

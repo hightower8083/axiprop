@@ -227,6 +227,9 @@ try:
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
 
+        def divide_or_set_to_one(self, ar1, ar2, condition):
+            return ( self.af.where(condition, ar1/ar2, 1.0) )
+
         def to_host(self, arr_in):
             arr_out = arr_in.to_ndarray()
             return arr_out
