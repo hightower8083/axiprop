@@ -255,7 +255,7 @@ class StepperNonParaxialPlasma:
         """
         assert u.dtype == self.dtype
 
-        self.stepping_image = self.bcknd.to_device( np.zeros_like(u) )
+        self.stepping_image = self.bcknd.zeros( u.shape, self.dtype )
         self.z_propagation = 0.0
 
         for ikz in range(self.Nkz):
@@ -337,7 +337,7 @@ class StepperNonParaxialPlasma:
             phase_term *= phase_term_mask
 
             self.u_loc = self.bcknd.to_device(J[ikz,:].copy())
-            self.TST()
+            self.TST_stepping()
 
             E_0 = self.stepping_image[ikz].copy()
             E_0_abs = self.bcknd.abs(E_0)
@@ -347,8 +347,8 @@ class StepperNonParaxialPlasma:
 
             if conservative:
                 E_new_abs = self.bcknd.abs(E_new)
-                E_new *= self.bcknd.divide_or_set_to_one(
-                    E_0_abs, E_new_abs, E_new_abs>0.0)
+                E_new *= self.bcknd.divide_abs_or_set_to_one(
+                    E_0_abs, E_new_abs)
 
             self.stepping_image[ikz] = E_new \
                 * self.bcknd.exp(1j * dz * phase_term ) \

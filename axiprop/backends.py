@@ -43,7 +43,8 @@ class BACKEND_NP():
     inv_sqr_on_host = inv_sqr_on_host
     inv = inv_on_host
 
-    def divide_or_set_to_one(self, ar1, ar2, condition):
+    def divide_abs_or_set_to_one(self, ar1, ar2):
+        condition = (ar2>0)
         result = np.where(condition, np.divide(ar1, ar2, where=condition), 1.0)
         return result
 
@@ -77,13 +78,12 @@ class BACKEND_NP():
 
 AVAILABLE_BACKENDS['NP'] = BACKEND_NP
 
-
 ################ PyOpenCL ################
 try:
     class BACKEND_CL():
 
         from pyopencl import create_some_context
-        from pyopencl import CommandQueue
+        from pyopencl import CommandQueue, Program
         import pyopencl.array as arrcl
         import pyopencl.clmath as clmath
         from reikna.cluda import ocl_api
@@ -99,6 +99,23 @@ try:
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
 
+        divide_abs_or_set_to_one_prg = Program(ctx,
+        """
+        __kernel void myknl(
+          __global const double *a1,
+          __global const double *a2,
+          __global double *res
+        )
+        {
+          int gid = get_global_id(0);
+          res[gid] = 1.0;
+          if (a2[gid]>0.0){
+            res[gid] = a1[gid] / a2[gid];
+          }
+        }
+        """).build()
+        divide_abs_or_set_to_one_knl = divide_abs_or_set_to_one_prg.myknl
+
         def to_host(self, arr_in):
             arr_out = arr_in.get()
             return arr_out
@@ -106,6 +123,13 @@ try:
         def to_device(self, arr_in, dtype=None):
             arr_out = self.thrd.to_device(np.ascontiguousarray(arr_in))
             return arr_out
+
+        def divide_abs_or_set_to_one(self, ar1, ar2):
+            res = self.arrcl.zeros_like(ar2)
+            self.divide_abs_or_set_to_one_knl(
+                self.queue, ar1.shape, None, ar1.data, ar2.data, res.data
+            ).wait()
+            return res
 
         def zeros(self, shape, dtype):
             arr_out = self.arrcl.zeros(self.queue, shape, dtype)
@@ -173,8 +197,8 @@ try:
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
 
-        def divide_or_set_to_one(self, ar1, ar2, condition):
-            return ( self.cp.where(condition, ar1/ar2, 1.0) )
+        def divide_abs_or_set_to_one(self, ar1, ar2):
+            return ( self.cp.where(ar2>0, ar1/ar2, 1.0) )
 
         def to_host(self, arr_in):
             arr_out = self.cp.asnumpy(arr_in)
@@ -227,8 +251,8 @@ try:
         inv_on_host = inv_on_host
         inv_sqr_on_host = inv_sqr_on_host
 
-        def divide_or_set_to_one(self, ar1, ar2, condition):
-            return ( self.af.where(condition, ar1/ar2, 1.0) )
+        def divide_abs_or_set_to_one(self, ar1, ar2):
+            return ( self.af.where(a2>0, ar1/ar2, 1.0) )
 
         def to_host(self, arr_in):
             arr_out = arr_in.to_ndarray()

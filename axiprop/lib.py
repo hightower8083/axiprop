@@ -466,21 +466,21 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
             self.Nr_ext = self.r_ext.size
 
+        if Nkr_new is None:
+            self.Nkr_new = self.Nr_ext
+        else:
+            self.Nkr_new = Nkr_new
+            if Nkr_new > Nr * N_pad:
+                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*N_pad} has no effect")
+
         if r_axis_new is None:
-            self.Nr_new = Nr
+            self.Nr_new = self.Nkr_new
         elif type(r_axis_new) is tuple:
             self.r_new, self.Rmax_new, self.Nr_new = \
                 self.init_r_uniform(r_axis_new)
         else:
             self.r_new, self.Rmax_new, self.Nr_new = \
                 self.init_r_sampled(r_axis_new)
-
-        if Nkr_new is None:
-            self.Nkr_new = self.Nr_new
-        else:
-            self.Nkr_new = Nkr_new
-            if Nkr_new > Nr * N_pad:
-                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*N_pad} has no effect")
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
@@ -534,7 +534,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
 
     def check_new_grid(self, dz):
         if self.r_axis_new is None:
-            self.r_new =  dz * self.kr[:self.Nkr_new] / self.kz[self.kz.size//2]
+            self.r_new =  dz * self.kr[:self.Nr_new] / self.kz.max()
 
         r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
         if self.r_new.max()>r_loc_min.max():
@@ -715,7 +715,34 @@ class PropagatorResamplingPlasma(
     A propagator with account for plasma response,
     based on `PropagatorResampling`
     """
-    pass
+
+    def init_TST_resampled(self):
+        """
+        Setup DHT transform
+        """
+        Nr = self.Nr
+        Nr_new = self.Nr_new
+        r = self.r
+        r_new = self.r_new
+        kr = self.kr
+        dtype = self.dtype
+        mode = self.mode
+
+        invTM = jn(mode, r_new[:,None] * kr[None,:])
+        self.TM_resampled = self.bcknd.inv_on_host(invTM, dtype)
+        self.TM_resampled = self.bcknd.to_device(self.TM_resampled)
+        self.TST_resampled_matmul = self.bcknd.make_matmul(
+            self.TM_resampled, self.u_iht, self.u_ht)
+
+    def TST_stepping(self):
+        """
+        Forward QDHT transform.
+        """
+        if not hasattr(self, 'TST_resampled_matmul'):
+            self.init_TST_resampled()
+
+        self.u_ht = self.TST_resampled_matmul(self.TM_resampled, self.u_loc, self.u_ht)
+
 
 class PropagatorSymmetricPlasma(
     PropagatorSymmetric, StepperNonParaxialPlasma):
@@ -723,4 +750,4 @@ class PropagatorSymmetricPlasma(
     A propagator with account for plasma response,
     based on `PropagatorSymmetric`
     """
-    pass
+    TST_stepping = PropagatorSymmetric.TST
