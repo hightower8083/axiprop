@@ -337,7 +337,6 @@ class ScalarField:
         """
         self.dtype = dtype
         self.dtype_ft = dtype_ft
-        self.t_loc = 0
         self.k0 = k0
         self.omega0 = k0 * c
         self.t_range = t_range
@@ -348,6 +347,7 @@ class ScalarField:
         if np.mod(self.t.size, 2) == 1:
             self.t = self.t[:-1]
         self.Nt = self.t.size
+        self.t_loc = self.t[0]
 
         self.Nk_freq_full = self.Nt // 2 + 1
         self.k_freq_full = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)[:self.Nk_freq_full]

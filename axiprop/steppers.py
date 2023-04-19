@@ -130,6 +130,115 @@ class StepperNonParaxial:
 
         return u_steps
 
+    def t2z(self, u, z_axis=None, show_progress=True):
+        """
+        Reconstruct wave `u` in the spatial domain.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        z_axis: array of floats (m)
+            Axis over which wave should be reconstructed.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the reconstructed field.
+        """
+        assert u.dtype == self.dtype
+
+        Nsteps = len(z_axis)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.zeros( (Nsteps, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+            k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
+                                                     self.kr2 ))
+            u_ht0 = self.u_ht.copy()
+            for i_step in range(Nsteps):
+                self.u_ht[:] = u_ht0 * self.bcknd.exp(
+                    1j * z_axis[i_step] * k_loc
+                )
+                self.iTST()
+                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
+    def z2t(self, u, t_axis, z0=0.0, show_progress=True):
+        """
+        Reconstruct wave `u` in the temporal domain.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to convert.
+
+        t_axis: array of floats (s)
+            Axis over which wave should be reconstructed.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
+        assert u.dtype == self.dtype
+
+        Nsteps = len(t_axis)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.zeros( (Nsteps, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+            k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 + \
+                                                     self.kr2 ))
+            u_ht0 = self.u_ht.copy()
+            for i_step in range(Nsteps):
+                self.u_ht[:] = u_ht0 * self.bcknd.exp(
+                    -1j * ( z0 * self.kz[ikz] - c * t_axis[i_step] * k_loc )
+                )
+                self.iTST()
+                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
+
 class StepperFresnel:
     """
     Class of steppers for paraxial propagators. Contains methods to:
