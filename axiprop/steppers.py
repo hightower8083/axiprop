@@ -130,7 +130,7 @@ class StepperNonParaxial:
 
         return u_steps
 
-    def t2z(self, u, z_axis=None, show_progress=True):
+    def t2z(self, u, z_axis=None, z0=0.0, t0=0.0, show_progress=True):
         """
         Reconstruct wave `u` in the spatial domain.
 
@@ -154,7 +154,7 @@ class StepperNonParaxial:
             return None
 
         u_steps = np.zeros( (Nsteps, *self.shape_trns_new),
-                         dtype=u.dtype)
+                            dtype=u.dtype)
 
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
@@ -164,13 +164,13 @@ class StepperNonParaxial:
             self.TST()
             k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
                                                      self.kr2 ))
-            u_ht0 = self.u_ht.copy()
+
+            u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * c * t0 )
             for i_step in range(Nsteps):
-                self.u_ht[:] = u_ht0 * self.bcknd.exp(
-                    1j * z_axis[i_step] * k_loc
-                )
+                self.u_ht[:] = u_ht0 * \
+                    self.bcknd.exp( 1j * (z_axis[i_step]-z0) * k_loc )
                 self.iTST()
-                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
+                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht )
 
                 if tqdm_available and show_progress:
                     pbar.update(1)
@@ -184,7 +184,7 @@ class StepperNonParaxial:
 
         return u_steps
 
-    def z2t(self, u, t_axis, z0=0.0, show_progress=True):
+    def z2t(self, u, t_axis, z0=0.0, t0=0.0, show_progress=True):
         """
         Reconstruct wave `u` in the temporal domain.
 
@@ -218,10 +218,12 @@ class StepperNonParaxial:
             self.TST()
             k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 + \
                                                      self.kr2 ))
-            u_ht0 = self.u_ht.copy()
+
+            u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * z0 )
+
             for i_step in range(Nsteps):
                 self.u_ht[:] = u_ht0 * self.bcknd.exp(
-                    -1j * ( z0 * self.kz[ikz] - c * t_axis[i_step] * k_loc )
+                    -1j * k_loc * c * ( t_axis[i_step] - t0 )
                 )
                 self.iTST()
                 u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
@@ -337,134 +339,3 @@ class StepperFresnel:
             pbar.close()
 
         return u_steps
-
-
-class StepperNonParaxialPlasma:
-    """
-    Class of steppers for the non-paraxial propagators with account 
-    for the plasma response. Contains methods to:
-    - initiate the stepped propagation mode a single-step calculation;
-    - perform a propagation step with account for the plasma refraction;
-    - perform a propagation step with account for the arbitrary plasma current;
-
-    This class should to be used to derive the actual Propagators
-    by adding proper methods for the Transverse Spectral Transforms (TST).
-    """
-
-    def initiate_stepping(self, u):
-        """
-        Initiate the stepped propagation mode. This mode allows 
-        computation of the consequent steps with access to the result on 
-        each step.
-
-        Parameters
-        ----------
-        u: 2darray of complex or double
-            Spectral-radial distribution of the field to be propagated.
-        """
-        assert u.dtype == self.dtype
-
-        self.stepping_image = self.bcknd.zeros( u.shape, self.dtype )
-        self.z_propagation = 0.0
-
-        for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
-            self.TST()
-            self.stepping_image[ikz] = self.u_ht.copy()
-
-    def stepping_step_kp2(self, kp2, dz, u_out=None):
-        """
-        Perform a step in the stepped propagation mode with account 
-        for the plasma refraction. This mode allows computation of the 
-        consequent steps with access to the result on each step.
-
-        Parameters
-        ----------
-        kp2: float (m^-2)
-            Square of plasma wavenumber
-
-        dz: float (m)
-            Step over which wave should be propagated.
-
-        u_out: 2darray of complex or double (optional)
-            Array to which data should be written.
-            If not provided will be allocated.
-        """
-        if u_out is None:
-            u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=self.dtype)
-
-        for ikz in range(self.Nkz):
-
-            phase_term = self.kz[ikz]**2 - self.kr2 - kp2
-            phase_term_mask = (phase_term>0.0)
-            phase_term = self.bcknd.sqrt(
-                self.bcknd.abs(phase_term) * phase_term_mask
-            )
-            self.stepping_image[ikz] *= self.bcknd.exp(1j * dz * phase_term)
-
-            self.u_ht[:] = self.stepping_image[ikz].copy()
-            self.iTST()
-            u_out[ikz] = self.bcknd.to_host(self.u_iht)
-
-        self.z_propagation += dz
-        return u_out
-
-    def stepping_step_withJ(self, kp2, J, dz, u_out=None, conservative=True):
-        """
-        Perform a step in the stepped propagation mode with account 
-        for the arbitrary plasma current. This mode allows computation 
-        of the consequent steps with access to the result on each step. 
-        In contrast to `step` can operate the `PropagatorResampling` 
-        class.
-
-        Parameters
-        ----------
-        kp2: float (m^-2)
-            Square of plasma wavenumber
-
-        J: 2darray of complex (A)
-            Plasma current in frequency space.
-
-        dz: float (m)
-            Step over which wave should be propagated.
-
-        u_out: 2darray of complex or double (optional)
-            Array to which data should be written.
-            If not provided will be allocated.
-        """
-        if u_out is None:
-            u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=self.dtype)
-
-        for ikz in range(self.Nkz):
-
-            phase_term = self.kz[ikz]**2 - self.kr2 - kp2
-            phase_term_mask = (phase_term>0.0)
-            phase_term = self.bcknd.sqrt(self.bcknd.abs(phase_term))
-            k_ll_inv = phase_term_mask / phase_term
-            phase_term *= phase_term_mask
-
-            self.u_loc = self.bcknd.to_device(J[ikz,:].copy())
-            self.TST_stepping()
-
-            E_0 = self.stepping_image[ikz].copy()
-            E_0_abs = self.bcknd.abs(E_0)
-
-            Upsilon = -1j * self.kz[ikz] * c * mu_0 * self.u_ht - kp2 * E_0
-            E_new = E_0 - 0.5j * k_ll_inv * dz * Upsilon
-
-            if conservative:
-                E_new_abs = self.bcknd.abs(E_new)
-                E_new *= self.bcknd.divide_abs_or_set_to_one(
-                    E_0_abs, E_new_abs)
-
-            self.stepping_image[ikz] = E_new \
-                * self.bcknd.exp(1j * dz * phase_term ) \
-
-            self.u_ht[:] = self.stepping_image[ikz].copy()
-            self.iTST()
-            u_out[ikz] = self.bcknd.to_host(self.u_iht)
-
-        self.z_propagation += dz
-        return u_out

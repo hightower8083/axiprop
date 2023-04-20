@@ -10,8 +10,6 @@ This file contains main propagators of axiprop:
 - PropagatorFFT2
 - PropagatorResamplingFresnel
 - PropagatorFFT2Fresnel
-- PropagatorResamplingPlasma
-- PropagatorSymmerticPlasma
 """
 import numpy as np
 from scipy.special import jn
@@ -20,7 +18,6 @@ import warnings
 from .common import CommonTools
 from .steppers import StepperFresnel
 from .steppers import StepperNonParaxial
-from .steppers import StepperNonParaxialPlasma
 
 
 class PropagatorSymmetric(CommonTools, StepperNonParaxial):
@@ -708,46 +705,3 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.x = dz * self.kx[ix0 : ix0 + Nx_new] / kz_max
         self.y = dz * self.ky[iy0 : iy0 + Ny_new] / kz_max
         self.r_new = (self.x, self.y)
-
-class PropagatorResamplingPlasma(
-    PropagatorResampling, StepperNonParaxialPlasma):
-    """
-    A propagator with account for plasma response,
-    based on `PropagatorResampling`
-    """
-
-    def init_TST_resampled(self):
-        """
-        Setup DHT transform
-        """
-        Nr = self.Nr
-        Nr_new = self.Nr_new
-        r = self.r
-        r_new = self.r_new
-        kr = self.kr
-        dtype = self.dtype
-        mode = self.mode
-
-        invTM = jn(mode, r_new[:,None] * kr[None,:])
-        self.TM_resampled = self.bcknd.inv_on_host(invTM, dtype)
-        self.TM_resampled = self.bcknd.to_device(self.TM_resampled)
-        self.TST_resampled_matmul = self.bcknd.make_matmul(
-            self.TM_resampled, self.u_iht, self.u_ht)
-
-    def TST_stepping(self):
-        """
-        Forward QDHT transform.
-        """
-        if not hasattr(self, 'TST_resampled_matmul'):
-            self.init_TST_resampled()
-
-        self.u_ht = self.TST_resampled_matmul(self.TM_resampled, self.u_loc, self.u_ht)
-
-
-class PropagatorSymmetricPlasma(
-    PropagatorSymmetric, StepperNonParaxialPlasma):
-    """
-    A propagator with account for plasma response,
-    based on `PropagatorSymmetric`
-    """
-    TST_stepping = PropagatorSymmetric.TST
