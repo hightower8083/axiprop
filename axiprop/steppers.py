@@ -9,7 +9,7 @@ This file contains stepper classes of axiprop:
 - StepperFresnel
 """
 import numpy as np
-from scipy.constants import mu_0, c
+from scipy.constants import c
 
 try:
     from tqdm.auto import tqdm
