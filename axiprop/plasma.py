@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm.auto import tqdm
-from scipy.constants import e, m_e, c, pi, epsilon_0, fine_structure
+from scipy.constants import e, m_e, c, pi, epsilon_0, fine_structure, mu_0
 from mendeleev import element as table_element
 from scipy.special import gamma as gamma_func
 from numba import njit, prange
