@@ -9,6 +9,7 @@ This file contains stepper classes of axiprop:
 - StepperFresnel
 """
 import numpy as np
+from scipy.constants import c
 
 try:
     from tqdm.auto import tqdm
@@ -56,7 +57,7 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:])
+            self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
             self.TST()
 
             phase_loc = self.kz[ikz]**2 - self.kr2
@@ -108,12 +109,12 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz])
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
             self.TST()
-            ik_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
+            k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
                                                      self.kr2 ))
             for i_step in range(Nsteps):
-                self.u_ht *= self.bcknd.exp(1j * dz[i_step] * ik_loc )
+                self.u_ht *= self.bcknd.exp(1j * dz[i_step] * k_loc )
                 self.iTST()
                 u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
 
@@ -128,6 +129,117 @@ class StepperNonParaxial:
             pbar.close()
 
         return u_steps
+
+    def t2z(self, u, z_axis=None, z0=0.0, t0=0.0, show_progress=True):
+        """
+        Reconstruct wave `u` in the spatial domain.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        z_axis: array of floats (m)
+            Axis over which wave should be reconstructed.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the reconstructed field.
+        """
+        assert u.dtype == self.dtype
+
+        Nsteps = len(z_axis)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.zeros( (Nsteps, *self.shape_trns_new),
+                            dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+            k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
+                                                     self.kr2 ))
+
+            u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * c * t0 )
+            for i_step in range(Nsteps):
+                self.u_ht[:] = u_ht0 * \
+                    self.bcknd.exp( 1j * (z_axis[i_step]-z0) * k_loc )
+                self.iTST()
+                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht )
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
+    def z2t(self, u, t_axis, z0=0.0, t0=0.0, show_progress=True):
+        """
+        Reconstruct wave `u` in the temporal domain.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to convert.
+
+        t_axis: array of floats (s)
+            Axis over which wave should be reconstructed.
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
+        assert u.dtype == self.dtype
+
+        Nsteps = len(t_axis)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.zeros( (Nsteps, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+            k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 + \
+                                                     self.kr2 ))
+
+            u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * z0 )
+
+            for i_step in range(Nsteps):
+                self.u_ht[:] = u_ht0 * self.bcknd.exp(
+                    -1j * k_loc * c * ( t_axis[i_step] - t0 )
+                )
+                self.iTST()
+                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
 
 class StepperFresnel:
     """
@@ -169,7 +281,7 @@ class StepperFresnel:
         self.check_new_grid(dz)
 
         for ikz in range(self.Nkz):
-            self.u_loc[:] = self.bcknd.to_device(u[ikz,:])
+            self.u_loc[:] = self.bcknd.to_device(u[ikz,:].copy())
             self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
             self.TST()
             u_slice_loc = self.bcknd.to_host(self.u_ht)
@@ -178,7 +290,8 @@ class StepperFresnel:
             phase_loc = self.kz[ikz] * dz * (1 + 0.5 * r2_loc / (dz*dz) )
             coef_loc = self.kz[ikz] / (1j * 2 * np.pi * dz)
             u_slice_loc *= coef_loc * np.exp( 1j * phase_loc )
-            u_slice_loc = self.gather_on_new_grid(u_slice_loc, r_loc, self.r_new)
+            u_slice_loc = self.gather_on_new_grid(
+                u_slice_loc, r_loc, self.r_new)
             u_step[ikz] = u_slice_loc.copy()
 
             if tqdm_available and show_progress:

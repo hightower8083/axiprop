@@ -16,8 +16,8 @@ from scipy.special import jn
 import warnings
 
 from .common import CommonTools
-from .steppers import StepperNonParaxial
 from .steppers import StepperFresnel
+from .steppers import StepperNonParaxial
 
 
 class PropagatorSymmetric(CommonTools, StepperNonParaxial):
@@ -463,21 +463,21 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
             self.Nr_ext = self.r_ext.size
 
+        if Nkr_new is None:
+            self.Nkr_new = self.Nr_ext
+        else:
+            self.Nkr_new = Nkr_new
+            if Nkr_new > Nr * N_pad:
+                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*N_pad} has no effect")
+
         if r_axis_new is None:
-            self.Nr_new = Nr
+            self.Nr_new = self.Nkr_new
         elif type(r_axis_new) is tuple:
             self.r_new, self.Rmax_new, self.Nr_new = \
                 self.init_r_uniform(r_axis_new)
         else:
             self.r_new, self.Rmax_new, self.Nr_new = \
                 self.init_r_sampled(r_axis_new)
-
-        if Nkr_new is None:
-            self.Nkr_new = self.Nr_new
-        else:
-            self.Nkr_new = Nkr_new
-            if Nkr_new > Nr * N_pad:
-                warnings.warn(f"Nkr_new>Nr*N_pad {Nr*N_pad} has no effect")
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
@@ -531,7 +531,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
 
     def check_new_grid(self, dz):
         if self.r_axis_new is None:
-            self.r_new =  dz * self.kr[:self.Nkr_new] / self.kz[self.kz.size//2]
+            self.r_new =  dz * self.kr[:self.Nr_new] / self.kz.max()
 
         r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
         if self.r_new.max()>r_loc_min.max():
