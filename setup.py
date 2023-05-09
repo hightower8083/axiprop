@@ -12,12 +12,6 @@ import axiprop
 with open("./README.md", encoding="utf-8") as f:
      long_description = f.read()
 
-#try:
-#    import pypandoc
-#    long_description = pypandoc.convert( './README.md', 'rst')
-#except (ImportError, RuntimeError):
-#    long_description = open('./README.md').read()
-
 # Get the package requirements from the requirements.txt file
 with open('requirements.txt') as f:
     install_requires = [ line.strip('\n') for line in f.readlines() ]
