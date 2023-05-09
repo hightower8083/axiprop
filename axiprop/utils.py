@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 # try import numba and make dummy methods if cannot
 try:
     from numba import njit, prange
-    #njit = njit(parallel=True, fastmath=True)
+    njit = njit(parallel=True)
 except Exception:
     prange = range
     def njit(func):
