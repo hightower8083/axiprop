@@ -14,6 +14,7 @@ try:
     long_description = pypandoc.convert( './README.md', 'rst')
 except (ImportError, RuntimeError):
     long_description = open('./README.md').read()
+
 # Get the package requirements from the requirements.txt file
 with open('requirements.txt') as f:
     install_requires = [ line.strip('\n') for line in f.readlines() ]
@@ -22,11 +23,13 @@ setup(
     name='axiprop',
     python_requires='>=3.6',
     version=axiprop.__version__,
-    description='optical propagation tool for axiparabola',
+    description="simple-to-use optical propagation tool",
     long_description=long_description,
+    author='Igor Andriyash',
     maintainer='Igor Andriyash',
     maintainer_email='igor.andriyash@gmail.com',
     license='GPL3',
+    license_files=["LICENSE",],
     packages=find_packages('.'),
     package_data={"": ['*']},
     tests_require=[],
