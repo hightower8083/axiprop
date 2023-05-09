@@ -45,7 +45,7 @@ setup(
         'Intended Audience :: Science/Research',
         'Operating System :: OS Independent',
         'Topic :: Scientific/Engineering :: Physics',
-        'Programming Language :: Python :: >=3.6',
+        'Programming Language :: Python :: 3.6',
         ],
     zip_safe=False,
     )
