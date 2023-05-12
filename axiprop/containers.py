@@ -160,7 +160,6 @@ class ScalarField:
         )
         return Energy
 
-
     def apply_boundary_ft(self, A):
         """
         Attenuate the given field at the transverse boundaries
@@ -445,6 +444,23 @@ class ScalarFieldEnvelope:
             (self.Nk_freq, *self.r_shape), dtype=self.dtype
         )
         self.time_to_frequency()
+
+    @property
+    def Energy(self):
+        """
+        Calculate total energy of the field from the temporal distribution
+        assuming it to correspond to the electric component, and all values
+        being defined in SI units. This method is typically much slower than
+        `Energy_ft` but may have a bit higher precision.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        Energy = np.pi * epsilon_0 * trapezoid(
+            trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
+        )
+        return Energy
 
     @property
     def Energy_ft(self):
