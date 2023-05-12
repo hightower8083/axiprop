@@ -53,9 +53,10 @@ class ScalarField:
         self.t_loc = self.t[0]
 
         self.Nk_freq_full = self.Nt // 2 + 1
-        self.k_freq_full = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)[:self.Nk_freq_full]
-        self.band_mask = np.abs(self.k_freq_full-k0)<bandwidth
+        self.k_freq_full = 2 * np.pi * np.fft.fftfreq( self.Nt, c*dt )
+        self.k_freq_full = self.k_freq_full[:self.Nk_freq_full]
 
+        self.band_mask = ( np.abs(self.k_freq_full - k0) < bandwidth )
         self.k_freq = self.k_freq_full[self.band_mask]
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
@@ -64,8 +65,8 @@ class ScalarField:
         dump_r = np.linspace(0, 1, n_dump)
         self.dump_mask = ( 1 - np.exp(-(2*dump_r)**3) )[::-1]
 
-    def make_gaussian_pulse(self, a0, tau, r, R_las,
-                            t0=0, phi0=0, n_ord=2, omega0=None):
+    def make_gaussian_pulse( self, a0, tau, r, R_las, t0=0,
+                             phi0=0, n_ord=2, omega0=None ):
         """
         Initialize the Gaussian pulse
 
@@ -120,8 +121,9 @@ class ScalarField:
         self.E0 = a0 * m_e * c * omega0 / e
         self.Field = self.E0 * profile_t * profile_r[None, :]
 
-        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
-                                 dtype=self.dtype_ft)
+        self.Field_ft = np.zeros(
+            (self.Nk_freq, *self.r_shape), dtype=self.dtype_ft
+        )
         self.time_to_frequency()
 
     @property
@@ -136,7 +138,7 @@ class ScalarField:
             return None
 
         Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
-            ( np.abs(self.Field_ft/self.Nt)**2 ).sum(0) * self.r, self.r
+            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
         )
 
         return Energy
@@ -257,7 +259,7 @@ class ScalarField:
             self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
                                      dtype=self.dtype_ft)
 
-        self.Field_ft[:] = np.fft.rfft(self.Field, axis=0)[self.band_mask]
+        self.Field_ft[:] = np.fft.rfft(self.Field, axis=0, norm='forward')[self.band_mask]
         self.Field_ft = np.conjugate( self.Field_ft )
         self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
 
@@ -265,15 +267,20 @@ class ScalarField:
         """
         Transform the field from frequency to the temporal domain
         """
-        Field_ft = self.Field_ft * np.exp(-1j * self.k_freq_shaped \
-            * c * self.t_loc)
-        Field_ft_full = np.zeros((self.Nk_freq_full, *self.r_shape),
-                                 dtype=self.dtype_ft)
+        Field_ft = self.Field_ft * np.exp(
+            -1j * self.k_freq_shaped * c * self.t_loc
+        )
+
+        Field_ft_full = np.zeros(
+            (self.Nk_freq_full, *self.r_shape), dtype=self.dtype_ft
+        )
+
         Field_ft_full[self.band_mask] = np.conjugate( Field_ft )
+
         if not hasattr(self, 'Field'):
             self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
 
-        self.Field[:] = np.fft.irfft(Field_ft_full, axis=0)
+        self.Field[:] = np.fft.irfft(Field_ft_full, axis=0, norm='forward')
 
     def get_temporal_slice(self, ix=None, iy=None, ir=None):
         """
@@ -330,16 +337,16 @@ class ScalarField:
         Field_ft_full = np.zeros((self.Nk_freq_full, *Field_ft[0].shape),
                                  dtype=self.dtype_ft)
         Field_ft_full[self.band_mask] = np.conjugate( Field_ft )
-        Field = np.fft.irfft(Field_ft_full, axis=0)
+        Field = np.fft.irfft(Field_ft_full, axis=0, norm='forward')
         return Field
+
 
 class ScalarFieldEnvelope:
     """
     A class to initialize and transform the optical field envelope
     between temporal and frequency domains.
     """
-    def __init__(self, k0, t_axis, n_dump=4,
-                 dtype_ft=np.complex128, dtype=np.double ):
+    def __init__(self, k0, t_axis, n_dump=4, dtype=np.complex128 ):
         """
         Initialize the container for the field.
 
@@ -358,7 +365,6 @@ class ScalarFieldEnvelope:
             Number of cells to be used for attenuating boundaries
         """
         self.dtype = dtype
-        self.dtype_ft = dtype_ft
         self.k0 = k0
         self.omega0 = k0 * c
 
@@ -368,7 +374,7 @@ class ScalarFieldEnvelope:
         self.Nt = self.t.size
         self.t_loc = self.t[0]
 
-        self.k_freq = 2 * np.pi * np.fft.fftfreq(self.Nt, c*dt)
+        self.k_freq = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
         self.k_freq += k0
 
         self.Nk_freq = self.k_freq.size
@@ -432,10 +438,12 @@ class ScalarFieldEnvelope:
             profile_r[:,:self.n_dump] *= self.dump_mask[::-1][None,:]
 
         self.E0 = a0 * m_e * c * omega0 / e
-        self.Field = (self.E0 * profile_t * profile_r[None,:]).astype(self.dtype)
+        self.Field = (self.E0 * profile_t * profile_r[None,:])\
+                        .astype(self.dtype)
 
-        self.Field_ft = np.zeros((self.Nk_freq, *self.r_shape),
-                                 dtype=self.dtype_ft)
+        self.Field_ft = np.zeros(
+            (self.Nk_freq, *self.r_shape), dtype=self.dtype
+        )
         self.time_to_frequency()
 
     @property
@@ -450,7 +458,7 @@ class ScalarFieldEnvelope:
             return None
 
         Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
-            ( np.abs(self.Field_ft/self.Nt)**2 ).sum(0) * self.r, self.r
+            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
         )
 
         return Energy
@@ -551,7 +559,7 @@ class ScalarFieldEnvelope:
         """
         if not hasattr(self, 'Field_ft'):
             self.Field_ft = np.zeros(
-                (self.Nk_freq, *self.r_shape), dtype=self.dtype_ft
+                (self.Nk_freq, *self.r_shape), dtype=self.dtype
             )
 
         self.Field_ft[:] = np.fft.ifft(self.Field, axis=0, norm="backward")
@@ -568,3 +576,58 @@ class ScalarFieldEnvelope:
             self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
 
         self.Field[:] = np.fft.fft(Field_ft, axis=0, norm="backward")
+
+    def get_temporal_slice(self, ix=None, iy=None, ir=None):
+        """
+        Get a slice or linout of the field in the temporal domain
+        performing FFT only for the selected points
+
+        Parameters
+        ----------
+        ix: int or ":" or None
+          If integer is used as x-slice coordinate for 3D field.
+          If None (default) corresponds to the center of the screen.
+          Can also be ":" which selects all, i.e. 2D slice in TX plane.
+          In the case ":", `iy` must be either intereger or None.
+
+        iy: int or ":" or None
+          If integer is used as y-slice coordinate for 3D field.
+          If None (default) corresponds to the center of the screen.
+          Can also be ":" which selects all, i.e. 2D slice in TY plane.
+          In the case ":", `ix` must be either intereger or None.
+
+        ir: int or None
+          If integer is used as r-slice coordinate for RT field.
+          If None (default) corresponds to the center of the screen.
+        """
+        shape_tr = self.Field_ft[0].shape
+
+        if len(shape_tr) == 1:
+            if ir is None:
+                ir = 0
+            Field_ft = self.Field_ft[:, ir].copy()
+            Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+
+        if len(shape_tr) == 2:
+            Nx, Ny = shape_tr
+            if ix is None and iy is None:
+                ix = Nx // 2 - 1
+                iy = Ny // 2 - 1
+                Field_ft = self.Field_ft[:, ix, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+            elif ix is ":":
+                if iy is None:
+                    iy = Ny // 2 - 1
+                Field_ft = self.Field_ft[:, :, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+            elif iy==":":
+                if ix is None:
+                    ix = Nx // 2 - 1
+                Field_ft = self.Field_ft[:, ix, :].copy()
+                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+            else:
+                Field_ft = self.Field_ft[:, ix, iy].copy()
+                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+
+        Field = np.fft.fft(Field_ft, axis=0, norm="backward")
+        return Field
