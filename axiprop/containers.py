@@ -457,7 +457,7 @@ class ScalarFieldEnvelope:
             print('provide r-axis')
             return None
 
-        Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+        Energy = np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
             ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
         )
 
