@@ -11,6 +11,52 @@ from scipy.constants import c, e, m_e, epsilon_0
 from scipy.integrate import trapezoid
 
 
+def apply_boundary_r(A, dump_mask):
+    """
+    Attenuate the given field at the transverse boundaries
+
+    Parameters
+    ----------
+    A: float ndarray
+        Some field of the same dimensions as the main
+        field of the container
+    """
+    n_dump = dump_mask.size
+    if n_dump==0:
+        return A
+
+    if len(A[0].shape)==1:
+        A[:,-n_dump:] *= dump_mask[None,:]
+    elif len(A[0].shape)==2:
+        A[:,:n_dump,:] = dump_mask[::-1][None,:,None]
+        A[:,:,:n_dump] = dump_mask[::-1][None,None,:]
+        A[:,-n_dump:,:] = dump_mask[None,:,None]
+        A[:,:,-n_dump:] = dump_mask[None,None,:]
+    return A
+
+def apply_boundary_t(A, dump_mask):
+    """
+    Attenuate the given field at the transverse boundaries
+
+    Parameters
+    ----------
+    A: float ndarray
+        Some field of the same dimensions as the main
+        field of the container
+    """
+    n_dump = dump_mask.size
+    if n_dump==0:
+        return A
+
+    if len(A[0].shape)==1:
+        A[:n_dump] *= dump_mask[::-1][:,None]
+        A[-n_dump:] *= dump_mask[:,None]
+    elif len(A[0].shape)==2:
+        A[:n_dump] *= dump_mask[::-1][:,None,None]
+        A[-n_dump:] *= dump_mask[:,None,None]
+    return A
+
+
 class ScalarField:
     """
     A class to initialize and transform the optical field between temporal
@@ -160,25 +206,6 @@ class ScalarField:
         )
         return Energy
 
-    def apply_boundary_ft(self, A):
-        """
-        Attenuate the given field at the transverse boundaries
-
-        Parameters
-        ----------
-        A: float ndarray
-            Some field of the same dimensions as the main
-            field of the container
-        """
-        if len(A[0].shape)==1:
-            A[:,-self.n_dump:] *= self.dump_mask[None,:]
-        elif len(A[0].shape)==2:
-            A[:,:self.n_dump,:] = self.dump_mask[::-1][None,:,None]
-            A[:,:,:self.n_dump] = self.dump_mask[::-1][None,None,:]
-            A[:,-self.n_dump:,:] = self.dump_mask[None,:,None]
-            A[:,:,-self.n_dump:] = self.dump_mask[None,None,:]
-        return A
-
     def import_field(self, A, t_loc=None, r=None,
                      transform=True):
         """
@@ -213,8 +240,9 @@ class ScalarField:
         self.Field = A.copy()
         self.r_shape = A[0].shape
         if transform:
+            self.Field = apply_boundary_r(self.Field, self.dump_mask)
             self.time_to_frequency()
-            self.apply_boundary_ft(self.Field_ft)
+            self.Field_ft = apply_boundary_t(self.Field_ft, self.dump_mask)
 
     def import_field_ft(self, A, t_loc=0, r=None, transform=True):
         """
@@ -319,12 +347,12 @@ class ScalarField:
                 iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, ix, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
-            elif ix is ":":
+            elif ix == ":":
                 if iy is None:
                     iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, :, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
-            elif iy==":":
+            elif iy == ":":
                 if ix is None:
                     ix = Nx // 2 - 1
                 Field_ft = self.Field_ft[:, ix, :].copy()
@@ -373,8 +401,8 @@ class ScalarFieldEnvelope:
         self.Nt = self.t.size
         self.t_loc = self.t[0]
 
-        self.k_freq = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
-        self.k_freq += k0
+        self.k_freq_base = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
+        self.k_freq = self.k_freq_base + k0
 
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
@@ -428,9 +456,11 @@ class ScalarFieldEnvelope:
             profile_r[-self.n_dump:] *= self.dump_mask
             profile_t = profile_t[:, None]
             self.k_freq_shaped = self.k_freq[:, None]
+            self.k_freq_base_shaped = self.k_freq_base[:, None]
         elif len(profile_r.shape) == 2:
             profile_t = profile_t[:, None, None]
             self.k_freq_shaped = self.k_freq[:, None, None]
+            self.k_freq_base_shaped = self.k_freq_base[:, None, None]
             profile_t[-self.n_dump:, :] *= self.dump_mask[:, None]
             profile_t[:self.n_dump, :] *= self.dump_mask[::-1][:, None]
             profile_r[:,-self.n_dump:] *= self.dump_mask[None,:]
@@ -479,33 +509,14 @@ class ScalarFieldEnvelope:
 
         return Energy
 
-    def apply_boundary_ft(self, A):
-        """
-        Attenuate the given field at the transverse boundaries
-
-        Parameters
-        ----------
-        A: float ndarray
-            Some field of the same dimensions as the main
-            field of the container
-        """
-        if len(A[0].shape)==1:
-            A[:,-self.n_dump:] *= self.dump_mask[None,:]
-        elif len(A[0].shape)==2:
-            A[:,:self.n_dump,:] = self.dump_mask[::-1][None,:,None]
-            A[:,:,:self.n_dump] = self.dump_mask[::-1][None,None,:]
-            A[:,-self.n_dump:,:] = self.dump_mask[None,:,None]
-            A[:,:,-self.n_dump:] = self.dump_mask[None,None,:]
-        return A
-
-    def import_field(self, A, t_loc=None, r=None,
+    def import_field(self, Field, t_loc=None, r=None,
                      transform=True):
         """
         Import the field from the temporal domain
 
         Parameters
         ----------
-        A: float ndarray
+        Field: float ndarray
           The field  to be imported of the same dimensions
           as the main field of the container
 
@@ -524,24 +535,28 @@ class ScalarFieldEnvelope:
         if r is not None:
             self.r = r
 
-        if len(A[0].shape)==1:
-            self.k_freq_shaped = self.k_freq[:, None]
-        elif len(A[0].shape)==2:
-            self.k_freq_shaped = self.k_freq[:, None, None]
+        if len(Field[0].shape)==1:
+            self.k_freq_base_shaped = self.k_freq_base[:, None]
+        elif len(Field[0].shape)==2:
+            self.k_freq_base_shaped = self.k_freq_base[:, None, None]
 
-        self.Field = A.copy()
-        self.r_shape = A[0].shape
+        self.Field = Field
+        self.r_shape = Field[0].shape
+
         if transform:
+            self.Field = apply_boundary_t(self.Field, self.dump_mask)
+            self.Field = apply_boundary_r(self.Field, self.dump_mask)
             self.time_to_frequency()
-            self.apply_boundary_ft(self.Field_ft)
 
-    def import_field_ft(self, A, t_loc=0, r=None, transform=True):
+        return self
+
+    def import_field_ft(self, Field, t_loc=0, r=None, transform=True):
         """
         Import the field from the frequency domain
 
         Parameters
         ----------
-        A: float ndarray
+        Field: float ndarray
           The field  to be imported of the same dimensions
           as the main field of the container (the frequency domain)
 
@@ -558,16 +573,18 @@ class ScalarFieldEnvelope:
         if r is not None:
             self.r = r
 
-        self.r_shape = A[0].shape
-        self.Field_ft = A.copy()
+        self.r_shape = Field[0].shape
+        self.Field_ft = Field.copy()
 
-        if len(A[0].shape)==1:
-            self.k_freq_shaped = self.k_freq[:, None]
-        elif len(A[0].shape)==2:
-            self.k_freq_shaped = self.k_freq[:, None, None]
+        if len(Field[0].shape)==1:
+            self.k_freq_base_shaped = self.k_freq_base[:, None]
+        elif len(Field[0].shape)==2:
+            self.k_freq_base_shaped = self.k_freq_base[:, None, None]
 
         if transform:
             self.frequency_to_time()
+
+        return self
 
     def time_to_frequency(self):
         """
@@ -579,14 +596,14 @@ class ScalarFieldEnvelope:
             )
 
         self.Field_ft[:] = np.fft.ifft(self.Field, axis=0, norm="backward")
-        self.Field_ft *= np.exp(1j * self.k_freq_shaped * c * self.t_loc)
+        self.Field_ft *= np.exp(1j * self.k_freq_base_shaped * c * self.t_loc)
 
     def frequency_to_time(self):
         """
         Transform the field from frequency to the temporal domain
         """
         Field_ft = self.Field_ft * np.exp(
-            -1j * self.k_freq_shaped * c * self.t_loc
+            -1j * self.k_freq_base_shaped * c * self.t_loc
         )
         if not hasattr(self, 'Field'):
             self.Field = np.zeros((self.Nt, *self.r_shape), dtype=self.dtype)
@@ -622,7 +639,7 @@ class ScalarFieldEnvelope:
             if ir is None:
                 ir = 0
             Field_ft = self.Field_ft[:, ir].copy()
-            Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+            Field_ft *= np.exp(-1j * self.k_freq_base * c * self.t_loc)
 
         if len(shape_tr) == 2:
             Nx, Ny = shape_tr
@@ -630,20 +647,20 @@ class ScalarFieldEnvelope:
                 ix = Nx // 2 - 1
                 iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, ix, iy].copy()
-                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
-            elif ix is ":":
+                Field_ft *= np.exp(-1j * self.k_freq_base * c * self.t_loc)
+            elif ix == ":":
                 if iy is None:
                     iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, :, iy].copy()
-                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
-            elif iy==":":
+                Field_ft *= np.exp(-1j * self.k_freq_base[:, None] * c * self.t_loc)
+            elif iy == ":":
                 if ix is None:
                     ix = Nx // 2 - 1
                 Field_ft = self.Field_ft[:, ix, :].copy()
-                Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
+                Field_ft *= np.exp(-1j * self.k_freq_base[:, None] * c * self.t_loc)
             else:
                 Field_ft = self.Field_ft[:, ix, iy].copy()
-                Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
+                Field_ft *= np.exp(-1j * self.k_freq_base * c * self.t_loc)
 
         Field = np.fft.fft(Field_ft, axis=0, norm="backward")
         return Field
