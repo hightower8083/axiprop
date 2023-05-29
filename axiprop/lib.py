@@ -19,6 +19,7 @@ from .common import CommonTools
 from .steppers import StepperFresnel
 from .steppers import StepperNonParaxial
 
+warnings.simplefilter("always")
 
 class PropagatorSymmetric(CommonTools, StepperNonParaxial):
     """

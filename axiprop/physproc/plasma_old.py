@@ -5,8 +5,8 @@ from mendeleev import element as table_element
 from scipy.special import gamma as gamma_func
 from numba import njit, prange
 
-from .lib import PropagatorResampling
-from .lib import PropagatorSymmetric
+from ..lib import PropagatorResampling
+from ..lib import PropagatorSymmetric
 
 #njit = njit(parallel=True)
 mc2_to_eV =  m_e*c**2/e

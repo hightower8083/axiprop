@@ -167,6 +167,8 @@ class ScalarField:
         )
         self.time_to_frequency()
 
+        return self
+
     @property
     def Energy_ft(self):
         """
@@ -239,6 +241,8 @@ class ScalarField:
             self.time_to_frequency()
             self.Field_ft = apply_boundary_t(self.Field_ft, self.dump_mask)
 
+        return self
+
     def import_field_ft(self, Field, t_loc=None, r=None, transform=True):
         """
         Import the field from the frequency domain
@@ -274,6 +278,8 @@ class ScalarField:
 
         if transform:
             self.frequency_to_time()
+
+        return self
 
     def time_to_frequency(self):
         """
@@ -466,6 +472,8 @@ class ScalarFieldEnvelope:
             (self.Nk_freq, *self.r_shape), dtype=self.dtype
         )
         self.time_to_frequency()
+
+        return self
 
     @property
     def Energy(self):
