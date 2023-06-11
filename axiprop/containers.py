@@ -98,8 +98,8 @@ class ScalarField:
         self.Nt = self.t.size
         self.t_loc = self.t[0]
 
-        self.Nk_freq_full = self.Nt // 2 + 1
-        self.k_freq_full = 2 * np.pi * np.fft.fftfreq( self.Nt, c*dt )
+        self.k_freq_full = 2 * np.pi * np.fft.rfftfreq( self.Nt, c*dt )
+        self.Nk_freq_full = self.k_freq_full.size
         self.k_freq_full = self.k_freq_full[:self.Nk_freq_full]
 
         self.band_mask = ( np.abs(self.k_freq_full - k0) < bandwidth )
