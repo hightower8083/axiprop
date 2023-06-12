@@ -3,6 +3,7 @@ import numpy as np
 from ..lib import PropagatorResampling
 from ..lib import PropagatorSymmetric
 from .steppers import StepperNonParaxialPlasma
+from scipy.special import jn
 
 class PropagatorResamplingStepping(
     PropagatorResampling, StepperNonParaxialPlasma):

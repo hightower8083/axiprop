@@ -325,7 +325,7 @@ class PlasmaIonizationOFI:
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK_OFI(
             E_loc_t, A_loc_t, sim.t_axis, sim.omega0, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            elf.Uion, self.Z_init, self.Zmax, self.refine_ord,
+            self.Uion, self.Z_init, self.Zmax, self.refine_ord,
             self.ionization_current)
 
         Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
