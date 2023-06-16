@@ -15,7 +15,6 @@ omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
 
-
 def refine1d(A, refine_ord):
     refine_ord = int(refine_ord)
     x = np.arange(A.size, dtype=np.double)
@@ -109,6 +108,7 @@ class PlasmaSimpleNonuniform:
 
         return Jp_ts
 
+
 class PlasmaRelativistic:
 
     def __init__(self, n_pe, dens_func):
@@ -162,6 +162,7 @@ class PlasmaRelativistic:
         Jp_ts *= self.coef_RHS(sim, kp_base=self.kp_z0)
 
         return Jp_ts
+
 
 class PlasmaIonization:
 
@@ -362,9 +363,9 @@ class PlasmaIonizationOFI:
         else:
             t_axis = sim.t_axis.copy()
 
-        Jp_loc_t, n_e, T_e = get_plasma_ADK_OFI(
+        Jp_loc_t, n_e, T_e, Xi = get_plasma_ADK_OFI(
             E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
             self.Uion, self.Z_init, self.Zmax, self.ionization_current)
 
-        return Jp_loc_t, n_e, T_e
+        return Jp_loc_t, n_e, T_e, Xi

@@ -97,9 +97,11 @@ def get_plasma_ADK_OFI(
     Z_init=0, Zmax=-1, ionization_current=True ):
 
     num_ions = pack_ADK[0].size + 1
-
-    J_plasma = np.zeros_like(E_laser)
     Nt, Nr = E_laser.shape
+
+    # ion_fracts_loc = np.zeros(num_ions)
+    Xi = np.zeros( (Nr, num_ions) )
+    J_plasma = np.zeros_like(E_laser)
     n_e = np.zeros(Nr)
     T_e = np.zeros(Nr)
 
@@ -173,12 +175,14 @@ def get_plasma_ADK_OFI(
             T_e[ir] = 0.0
 
         n_e[ir] =  all_new_events * n_gas_ir
+        Xi[ir, :] += ion_fracts_loc
 
         J_ir_t = 2 * phase_env_inv * J_ir_t_re
         J_plasma[:, ir] = J_ir_t.copy()
 
-    return J_plasma, n_e, T_e
+    return J_plasma, n_e, T_e, Xi
 
+""" 
 def get_plasma_J_ADK_OFI(
     E_laser, A_laser, t_axis, omega0, n_gas, pack_ADK, Uion,
     Z_init=0, Zmax=-1, refine_ord=1, ionization_current=True ):
@@ -274,3 +278,4 @@ def get_plasma_J_ADK_OFI(
         J_plasma[:, ir] = J_ir_t.copy()
 
     return J_plasma, n_e, T_e
+"""
