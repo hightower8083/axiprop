@@ -130,6 +130,65 @@ class StepperNonParaxial:
 
         return u_steps
 
+    def steps_disp(self, u, z_axis, kp_axis=None, show_progress=True):
+        """
+        Propagate wave `u` over the multiple steps.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        z_axis: array of floats (m)
+            Axis over which wave should be propagated. Overrides dz.
+
+        kp_axis: array of floats (1/m)
+            Plasma wavevectors along the propagation
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
+        assert u.dtype == self.dtype
+        if z_axis is not None:
+            dz = np.r_[z_axis[0], np.diff(z_axis)]
+
+        Nsteps = len(dz)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+
+            for i_step in range(Nsteps):
+                k_loc = self.bcknd.sqrt(self.bcknd.abs(
+                    self.kz[ikz]**2 - self.kr2 - kp_axis[i_step]**2)
+                )
+
+                self.u_ht *= self.bcknd.exp(1j * dz[i_step] * k_loc )
+                self.iTST()
+                u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
     def t2z(self, u, z_axis=None, z0=0.0, t0=0.0, show_progress=True):
         """
         Reconstruct wave `u` in the spatial domain.
