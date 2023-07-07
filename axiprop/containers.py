@@ -415,7 +415,8 @@ class ScalarFieldEnvelope:
         self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
 
     def make_gaussian_pulse(self, a0, tau, r, R_las,
-                            t0=0, phi0=0, n_ord=2, omega0=None):
+                            t0=0, phi0=0, n_ord=2,
+                            omega0=None, transform=True):
         """
         Initialize the Gaussian pulse
 
@@ -441,6 +442,9 @@ class ScalarFieldEnvelope:
 
         omega0: float (s^-1)
             central frequency of the pulse
+
+        transform: bool
+            Wether to transform the field to the frequency domain
         """
         self.r_shape = r.shape
         t = self.t
@@ -468,10 +472,11 @@ class ScalarFieldEnvelope:
         self.Field = apply_boundary_t(self.Field, self.dump_mask)
         self.Field = apply_boundary_r(self.Field, self.dump_mask)
 
-        self.Field_ft = np.zeros(
-            (self.Nk_freq, *self.r_shape), dtype=self.dtype
-        )
-        self.time_to_frequency()
+        if transform:
+            self.Field_ft = np.zeros(
+                (self.Nk_freq, *self.r_shape), dtype=self.dtype
+            )
+            self.time_to_frequency()
 
         return self
 
