@@ -309,7 +309,7 @@ class StepperFresnel:
     This class should to be used to derive the actual Propagators
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
-    def step(self, u, dz, overwrite=False, show_progress=False):
+    def step(self, u, dz, dz_min=None, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
 
@@ -334,10 +334,13 @@ class StepperFresnel:
         else:
             u_step = u
 
+        if dz_min is None:
+            dz_min = dz
+
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
-        self.check_new_grid(dz)
+        self.check_new_grid(dz_min)
 
         for ikz in range(self.Nkz):
             self.u_loc[:] = self.bcknd.to_device(u[ikz,:].copy())
@@ -390,7 +393,7 @@ class StepperFresnel:
             pbar = tqdm(total=Nsteps, bar_format=bar_format)
 
         for i_step, z_dest in enumerate(z_axis):
-            u_steps[i_step] = self.step(u, z_dest)
+            u_steps[i_step] = self.step(u, z_dest, dz_min=z_axis.min())
             if tqdm_available and show_progress:
                 pbar.update(1)
 
