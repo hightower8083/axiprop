@@ -107,7 +107,7 @@ class Simulation:
 
         return dz
 
-    def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-3, growth_rate=1.01):
+    def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2, growth_rate=1.01):
 
         if err_max<err:
             ErrFact = err_max / err

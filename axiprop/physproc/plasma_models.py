@@ -58,6 +58,52 @@ def refine1d_TR(A, refine_ord):
     return A_new
 
 
+class PlasmaSimple:
+
+    def __init__(self, n_pe, dens_func, variative=True):
+        self.n_pe = n_pe
+        self.dens_func = dens_func
+        self.variative = variative
+
+    def coef_RHS(self, sim, kp):
+        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp**2
+        cond = (k_z2>0.0)
+        k_z_inv = np.divide(
+            1., np.sqrt(k_z2, where=cond), where=cond)
+        k_z_inv *= cond
+        coef_RHS = sim.prop.bcknd.to_device(-0.5j * e**2 * mu_0 / m_e * k_z_inv)
+
+        return coef_RHS
+
+    def get_RHS(self, sim, E_ts, dz=0.0 ):
+
+        r_axis = sim.prop.r_new
+        n_pe_z0 = self.n_pe * self.dens_func( sim.z_0, r_axis )[0]
+        n_pe_z = self.n_pe * self.dens_func( sim.z_0 + dz, r_axis )[0]
+
+        if self.variative:
+            n_pe_z -= n_pe_z0
+            self.kp_z0 = ( n_pe_z0 * e**2 / m_e / epsilon_0 )**0.5 / c
+        else:
+            self.kp_z0 = 0.0
+
+
+        if dz != 0.0:
+            sim.t_axis += dz / c
+            E_loc = sim.prop.step_simple(E_ts, dz, kp=self.kp_z0)
+        else:
+            E_loc = E_ts
+
+        Jp_ts = E_loc * n_pe_z
+        Jp_ts *= self.coef_RHS(sim, self.kp_z0)
+
+        if dz != 0.0:
+            sim.t_axis -= dz / c
+            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
+
+        return Jp_ts
+
+
 class PlasmaSimpleNonuniform:
 
     def __init__(self, n_pe, dens_func, variative=True):
