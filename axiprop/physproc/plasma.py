@@ -1,12 +1,12 @@
 import numpy as np
 
-from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0, fine_structure
+from scipy.constants import e, m_e, c, pi, epsilon_0
+from scipy.constants import mu_0, fine_structure
 from scipy.special import gamma as gamma_func
-from scipy.interpolate import interp1d
-
 from mendeleev import element as table_element
 
 from ..containers import ScalarFieldEnvelope
+from ..utils import refine1d, refine1d_TR
 from .ionization_inline import get_plasma_ADK
 from .ionization_inline import get_plasma_ADK_OFI
 
@@ -14,48 +14,6 @@ r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
 omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
-
-def refine1d(A, refine_ord):
-    refine_ord = int(refine_ord)
-    x = np.arange(A.size, dtype=np.double)
-    x_new = np.linspace(x.min(), x.max(), x.size*refine_ord)
-
-    if A.dtype == np.double:
-        interp_fu = interp1d(x, A, assume_sorted=True)
-        A_new = interp_fu(x_new)
-    elif A.dtype == np.complex128:
-        interp_fu_abs = interp1d(x, np.abs(A), assume_sorted=True)
-        slice_abs = interp_fu_abs(x_new)
-
-        interp_fu_angl = interp1d(x, np.unwrap(np.angle(A)), assume_sorted=True)
-        slice_angl = interp_fu_angl(x_new)
-
-        A_new = slice_abs * np.exp(1j * slice_angl)
-    else:
-        print("Data type must be `np.double` or `np.complex128`")
-        return None
-
-    return A_new
-
-def refine1d_TR(A, refine_ord):
-    refine_ord = int(refine_ord)
-
-    t = np.arange(A.shape[0], dtype=np.double)
-    t_new = np.linspace(t.min(), t.max(), t.size*refine_ord)
-
-    A_new = np.zeros((t_new.size, A.shape[1]), dtype=A.dtype)
-
-    for ir in range(A.shape[1]):
-        interp_fu_abs = interp1d(t, np.abs(A[:, ir]), assume_sorted=True)
-        slice_abs = interp_fu_abs(t_new)
-
-        interp_fu_angl = interp1d( t, np.unwrap(np.angle(A[:, ir])),
-                                   assume_sorted=True )
-        slice_angl = interp_fu_angl(t_new)
-
-        A_new[:, ir] = slice_abs * np.exp(1j * slice_angl)
-
-    return A_new
 
 
 class PlasmaSimple:

@@ -1,21 +1,7 @@
 import numpy as np
 from numba import njit, prange
-from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0, fine_structure
-from scipy.interpolate import interp1d
-
-def refine_1d(A, refine_ord):
-    refine_ord = int(refine_ord)
-    x = np.arange(A.size, dtype=np.double)
-    x_new = np.linspace(x.min(), x.max(), x.size*refine_ord)
-
-    interp_fu_abs = interp1d(x, np.abs(A), assume_sorted=True)
-    slice_abs = interp_fu_abs(x_new)
-
-    interp_fu_angl = interp1d(x, np.unwrap(np.angle(A)), assume_sorted=True)
-    slice_angl = interp_fu_angl(x_new)
-
-    A_new = slice_abs * np.exp(1j * slice_angl)
-    return A_new
+from scipy.constants import e, m_e, c, pi, mu_0
+from scipy.constants import epsilon_0, fine_structure
 
 @njit
 def get_ADK_probability(E_fld, dt, adk_power, \
@@ -194,7 +180,7 @@ def get_plasma_J_ADK_OFI(
     T_e = np.zeros(Nr)
 
     if refine_ord is not None:
-        t_axis = np.real( refine_1d(t_axis, refine_ord) )
+        t_axis = np.real( refine1d(t_axis, refine_ord) )
         Nt = t_axis.size
 
     dt = t_axis[1] - t_axis[0]
@@ -207,8 +193,8 @@ def get_plasma_J_ADK_OFI(
         A_ir_t = A_laser[:,ir].copy()
 
         if refine_ord is not None:
-            E_ir_t = refine_1d(E_ir_t, refine_ord)
-            A_ir_t = refine_1d(A_ir_t, refine_ord)
+            E_ir_t = refine1d(E_ir_t, refine_ord)
+            A_ir_t = refine1d(A_ir_t, refine_ord)
 
         phase_env = np.exp(-1j * omega0 * t_axis)
         phase_env_inv = np.exp(1j * omega0 * t_axis)
