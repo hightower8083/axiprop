@@ -18,10 +18,9 @@ UH = table_element('H').ionenergies[1]
 
 class PlasmaSimple:
 
-    def __init__(self, n_pe, dens_func, variative=True):
+    def __init__(self, n_pe, dens_func ):
         self.n_pe = n_pe
         self.dens_func = dens_func
-        self.variative = variative
 
     def coef_RHS(self, sim, kp):
         k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp**2
@@ -36,15 +35,8 @@ class PlasmaSimple:
     def get_RHS(self, sim, E_ts, dz=0.0 ):
 
         r_axis = sim.prop.r_new
-        n_pe_z0 = self.n_pe * self.dens_func( sim.z_0, r_axis )[0]
         n_pe_z = self.n_pe * self.dens_func( sim.z_0 + dz, r_axis )[0]
-
-        if self.variative:
-            n_pe_z -= n_pe_z0
-            self.kp_z0 = ( n_pe_z0 * e**2 / m_e / epsilon_0 )**0.5 / c
-        else:
-            self.kp_z0 = 0.0
-
+        self.kp_z0 = 0.0
 
         if dz != 0.0:
             sim.t_axis += dz / c
@@ -64,10 +56,9 @@ class PlasmaSimple:
 
 class PlasmaSimpleNonuniform:
 
-    def __init__(self, n_pe, dens_func, variative=True):
+    def __init__( self, n_pe, dens_func ):
         self.n_pe = n_pe
         self.dens_func = dens_func
-        self.variative = variative
 
     def coef_RHS(self, sim, kp):
         k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp**2
@@ -80,16 +71,10 @@ class PlasmaSimpleNonuniform:
         return coef_RHS
 
     def get_RHS(self, sim, E_ts, dz=0.0 ):
-
         r_axis = sim.prop.r_new
-        n_p0_z0 = self.n_pe * self.dens_func( sim.z_0, r_axis )[0]
-        n_pe = self.n_pe * self.dens_func( sim.z_0 + dz, r_axis )[None,:]
-
-        if self.variative:
-            n_pe -= n_p0_z0
-            self.kp_z0 = ( n_p0_z0 * e**2 / m_e / epsilon_0 )**0.5 / c
-        else:
-            self.kp_z0 = 0.0
+        n_pe = self.n_pe * self.dens_func(
+            sim.z_0 + dz, sim.prop.r_new )[None,:]
+        self.kp_z0 = 0.0
 
         if dz != 0.0:
             sim.t_axis += dz / c
