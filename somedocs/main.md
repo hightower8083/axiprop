@@ -24,9 +24,9 @@ In a case when field propagates in vacuum, there is no current $J = 0$ and equat
 
 $$ \nabla^2 E = \frac{1}{c^2}  \partial_t^2 E $$
 
-#### Linear plasma dispersion
+### Plasma dispersion
 
-Simplest nonrelativistic plasma response can be described with help of motion equation:
+Simplest plasma response can be described with help of non-relativistic motion equation:
 
 $$ \mu_0 \partial_t J = -e \mu_0 n_{pe} \partial_t v = \omega_{pe}^2 / c^2 E $$
 
@@ -40,30 +40,38 @@ and its spatio-temporal Fourier transform leads to the basic dispersion relation
 
 $$ \omega^2 = k^2 c^2 + \omega_{pe}^2 $$
 
+### Field representation
 
-## In-code representation
+#### Temporal representation
 
-In `axiprop` the field propagation along z-axis is assumed and the temporal representation is considered. The later means that full field $E(t,x,y,z)$ is considered at a fixed $z=z_0$, and is measured on a finite $(x,y)$-plane over a time interval $t\in[t_{min},t_{max}]$, so the input as $E_0 = E(t,x,y,z=z_0)$. 
+We assumed the field propagation along z-axis is  and the temporal representation. The later means that the full field $E(t,x,y,z)$ is considered at a fixed $z=z_0$, and is measured on a finite $(x,y)$-plane over a time interval $t\in[t_{min},t_{max}]$, so the input as $E_0 = E(t,x,y,z=z_0)$. 
 
 The field equation can be written as following:
 
 $$ \partial_z^2 E =  \frac{1}{c^2}  \partial_t^2 E - \nabla_{\perp}^2 E + \mu_0  \partial_t J   $$
 
-Two main geometries are consider the 3D cartesian $(x, y, t)$ and 2D RZ $(r, t)$. In 3D the transverse Laplace operator is $\nabla_\perp^2 = \partial_x^2 + \partial_y^2$ while in RZ it is $\nabla_{\perp}^2 = r^{-1} \partial_r (r \partial_r)$ 
+#### Geometries
+
+Two main geometries are usually considered
+- cartesian $(x, y, t)$, where transverse Laplace operator is $\nabla_\perp^2 = \partial_x^2 + \partial_y^2$
+- cylindrical $(r, \theta, t)$, where $\nabla_{\perp}^2 = r^{-1} \partial_r (r \partial_r) +  r^{-2} \partial_\theta^2$. 
+
+#### Enelope
+
+If one considers the field around its central frequency $\omega_0$ as:
+
+$$ E(t) = \mathrm{Re}[\hat{E}(t) \exp(- i \omega_0 t) ], $$
+
+in many practical cases the complex function $\hat{E}(t)$ can be assumed to be much slower than the actual $E(t)$. This presentation called envelope is often preferrable for analysis, and is also used in `Lasy`
 
 ## Propagation
 
+Propagation calculations in `axiprop` are realized with spectral transformations in time and transverse spatial domains.
 
-The RHS of wave equation can be linearized in Fourier space, and for  the temporal representation we can define it as:
+### Non-paraxial propagator
 
-$$ E = \sum_{\omega,k_x,k_y} \; \hat{E}_{\omega,k_x,k_y}  \exp\big[ -i (\omega t - k_x x - k_y y)\big]  $$
+#### 3D
 
-For propagation in positive direction along $z$ axis, the solution to the wave equation gives:
+#### RZ
 
-$$ \hat{E}(z) =  \hat{E}_0 \;  \exp\left[ i (z-z_0) \; \sqrt{\omega^2/c^2 - k_x^2 - k_y^2} \;\right]$$
-
-Go to RZ geometry and consider only polarisation component:
-
-___
-$$ \partial_z^2 E = \frac{1}{c^2} \; \partial_t^2 E - \nabla_\perp^2 E + \mu_0  \partial_t J$$
-___
+### Fresnel propagator
