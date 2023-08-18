@@ -11,6 +11,9 @@ from .ionization_inline import get_plasma_ADK
 from .ionization_inline import get_plasma_ADK_OFI
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
+
+mc_m2 = 1. / ( m_e * c )**2
+
 omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
@@ -18,157 +21,112 @@ UH = table_element('H').ionenergies[1]
 
 class PlasmaSimple:
 
-    def __init__(self, n_pe, dens_func ):
+    def __init__(self, n_pe, dens_func, sim ):
         self.n_pe = n_pe
         self.dens_func = dens_func
+        self.sim = sim
+        self.coef_RHS = -0.5j * e**2 * mu_0 / m_e * sim.prop.k_z_inv
 
-    def coef_RHS(self, sim, kp):
-        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp**2
-        cond = (k_z2>0.0)
-        k_z_inv = np.divide(
-            1., np.sqrt(k_z2, where=cond), where=cond)
-        k_z_inv *= cond
-        coef_RHS = sim.prop.bcknd.to_device(-0.5j * e**2 * mu_0 / m_e * k_z_inv)
-
-        return coef_RHS
-
-    def get_RHS(self, sim, E_ts, dz=0.0 ):
-
-        r_axis = sim.prop.r_new
-        n_pe_z = self.n_pe * self.dens_func( sim.z_0 + dz, r_axis )[0]
-        self.kp_z0 = 0.0
+    def get_RHS(self, E_ts, dz=0.0 ):
+        sim = self.sim
+        prop = self.sim.prop
+        n_pe_z = self.n_pe * self.dens_func( sim.z_0 + dz, prop.r_new )[0]
 
         if dz != 0.0:
             sim.t_axis += dz / c
-            E_loc = sim.prop.step_simple(E_ts, dz, kp=self.kp_z0)
+            E_loc = prop.step_simple(E_ts, dz)
         else:
             E_loc = E_ts
 
-        Jp_ts = E_loc * n_pe_z
-        Jp_ts *= self.coef_RHS(sim, self.kp_z0)
+        Jp_ts = n_pe_z * E_loc * self.coef_RHS
 
         if dz != 0.0:
             sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
 
         return Jp_ts
 
+class PlasmaSimpleNonuniform(PlasmaSimple):
 
-class PlasmaSimpleNonuniform:
-
-    def __init__( self, n_pe, dens_func ):
-        self.n_pe = n_pe
-        self.dens_func = dens_func
-
-    def coef_RHS(self, sim, kp):
-        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp**2
-        cond = (k_z2>0.0)
-        k_z_inv = np.divide(
-            1., np.sqrt(k_z2, where=cond), where=cond)
-        k_z_inv *= cond
-        coef_RHS = sim.prop.bcknd.to_device(-0.5j * e**2 * mu_0 / m_e * k_z_inv)
-
-        return coef_RHS
-
-    def get_RHS(self, sim, E_ts, dz=0.0 ):
-        r_axis = sim.prop.r_new
+    def get_RHS(self, E_ts, dz=0.0 ):
+        sim = self.sim
+        prop = self.sim.prop
         n_pe = self.n_pe * self.dens_func(
-            sim.z_0 + dz, sim.prop.r_new )[None,:]
-        self.kp_z0 = 0.0
+            sim.z_0 + dz, prop.r_new )[None,:]
+        n_pe = sim.prop.bcknd.to_device( n_pe )
 
         if dz != 0.0:
             sim.t_axis += dz / c
-            E_loc = sim.prop.step_and_iTST(E_ts, dz, kp=self.kp_z0)
+            E_loc = prop.step_and_iTST(E_ts, dz)
         else:
-            E_loc = sim.prop.perform_iTST(E_ts)
+            E_loc = prop.perform_iTST(E_ts)
 
-        E_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
-            E_loc).Field
-
-        Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
-            E_loc_t * n_pe ).Field_ft
-
-        Jp_ts = sim.prop.perform_TST( Jp_ft )
-        Jp_ts *= self.coef_RHS(sim, self.kp_z0)
+        Jp_ts = sim.prop.perform_TST( E_loc * n_pe )
+        Jp_ts *= self.coef_RHS
 
         if dz != 0.0:
             sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
 
         return Jp_ts
 
 
 class PlasmaRelativistic:
 
-    def __init__(self, n_pe, dens_func):
+    def __init__(self, n_pe, dens_func, sim):
         self.n_pe = n_pe
         self.dens_func = dens_func
+        self.sim = sim
+        self.coef_RHS = -0.5 * mu_0 * sim.prop.omega * sim.prop.k_z_inv
 
-    def coef_RHS(self, sim, kp_base=0.0):
-        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp_base**2
-        cond = (k_z2>0.0)
-        k_z_inv = np.divide(
-            1., np.sqrt(k_z2, where=cond), where=cond)
-        k_z_inv *= cond
-
-        omega = sim.prop.kz[:, None] * c
-        coef_RHS = sim.prop.bcknd.to_device(-0.5 * mu_0 * omega * k_z_inv)
-
-        return coef_RHS
-
-    def get_RHS(self, sim, E_ts, dz=0.0 ):
-
-        r_axis = sim.prop.r_new
-        omega = sim.prop.kz[:, None] * c
-
-        n_pe = self.n_pe * self.dens_func( sim.z_0 + dz, r_axis )[None,:]
-        self.kp_z0 = 0.0
+    def get_RHS(self, E_ts, dz=0.0 ):
+        sim = self.sim
+        prop = self.sim.prop
+        n_pe = self.n_pe * self.dens_func( sim.z_0 + dz, prop.r_new )[None,:]
 
         if dz != 0.0:
             sim.t_axis += dz / c
-            E_loc = sim.prop.step_and_iTST(E_ts, dz, kp=self.kp_z0)
+            E_loc = prop.step_and_iTST_transfer(E_ts, dz)
         else:
-            E_loc = sim.prop.perform_iTST(E_ts)
+            E_loc = prop.perform_iTST_transfer(E_ts)
 
-        P_loc = -1j * e * E_loc * np.divide(1, omega, where=(omega>0.0))
-        P_loc *= (omega>0.0)
+        P_loc = -1j * e * E_loc * prop.omega_inv
 
         P_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
             P_loc).Field
 
         Jp_loc_t = - e * n_pe * P_loc_t / m_e \
-            / np.sqrt( 1 + 0.5 * np.abs(P_loc_t)**2 / (m_e*c)**2 )
+            / np.sqrt( 1.0 + 0.5 * np.abs(P_loc_t)**2 * mc_m2 )
 
         Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
             Jp_loc_t ).Field_ft
 
-        Jp_ts = sim.prop.perform_TST( Jp_ft )
+        Jp_ts = prop.perform_transfer_TST( Jp_ft )
 
         if dz != 0.0:
             sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
 
-        Jp_ts *= self.coef_RHS(sim, kp_base=self.kp_z0)
+        Jp_ts *= self.coef_RHS
 
         return Jp_ts
 
+class PlasmaIonization(PlasmaRelativistic):
 
-class PlasmaIonization:
-
-    def __init__( self, n_gas, dens_func, my_element,
+    def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True):
 
-        self.n_gas = n_gas
-        self.dens_func = dens_func
-        self.make_ADK(my_element)
+        super().__init__(n_gas, dens_func, sim)
+
         self.Z_init = Z_init
         self.Zmax = Zmax
+        self.make_ADK(my_element)
         self.ionization_current = ionization_current
 
     def make_ADK(self, my_element):
         """
         Prepare the useful data for ADK probabplity calculation for a given
-        element. This part is mostly a copy-pased from FBPIC code
+        element. This part is mostly a copy-pased from FBPIC
         [https://github.com/fbpic/fbpic]
         """
 
@@ -187,33 +145,20 @@ class PlasmaIonization:
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
         self.Uion = Uion
 
-    def coef_RHS(self, sim, kp_base=0.0):
-        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp_base**2
-        cond = (k_z2>0.0)
-        k_z_inv = np.divide(
-            1., np.sqrt(k_z2, where=cond), where=cond)
-        k_z_inv *= cond
-
-        omega = sim.prop.kz[:, None] * c
-        coef_RHS = sim.prop.bcknd.to_device(-0.5 * mu_0 * omega * k_z_inv)
-
-        return coef_RHS
-
     def get_RHS(self, sim, E_ts, dz=0.0 ):
-
-        r_axis = sim.prop.r_new
+        sim = self.sim
+        prop = self.sim.prop
         omega = sim.prop.kz[:, None] * c
 
-        n_gas = self.n_gas * self.dens_func( sim.z_0 + dz, r_axis )
-        self.kp_z0 = 0.0
+        n_gas = self.n_gas * self.dens_func( sim.z_0 + dz, prop.r_new )
 
         if dz != 0.0:
             sim.t_axis += dz / c
-            E_loc = sim.prop.step_and_iTST(E_ts, dz, kp=self.kp_z0)
+            E_loc = sim.prop.prop.step_and_iTST_transfer(E_ts, dz)
         else:
-            E_loc = sim.prop.perform_iTST(E_ts)
+            E_loc = prop.perform_iTST_transfer(E_ts)
 
-        A_loc = -1j * np.divide(1, omega, where=(omega>0.0)) * E_loc
+        A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
 
         E_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
@@ -231,15 +176,16 @@ class PlasmaIonization:
         Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
             Jp_loc_t ).Field_ft
 
-        Jp_ts = sim.prop.perform_TST( Jp_ft )
+        Jp_ts = prop.perform_transfer_TST( Jp_ft )
 
         if dz != 0.0:
             sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
+            Jp_ts = sim.prop.step_simple(Jp_ts, -dz)
 
-        Jp_ts *= self.coef_RHS(sim, kp_base=self.kp_z0)
+        Jp_ts *= self.coef_RHS
 
         return Jp_ts
+
 
 class PlasmaIonizationOFI:
 

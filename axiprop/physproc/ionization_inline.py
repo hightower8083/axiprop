@@ -17,7 +17,7 @@ def get_ADK_probability(E_fld, dt, adk_power, \
         Propab += 1. - np.exp( - W_rate * dt )
     return Propab
 
-@njit
+@njit(parallel=True)
 def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                     Z_init, Zmax, ionization_current ):
 
@@ -28,7 +28,7 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
     n_e = np.zeros(Nr)
     T_e = np.zeros(Nr)
 
-    for ir in range(Nr):
+    for ir in prange(Nr):
 
         n_gas_loc = n_gas[ir]
 

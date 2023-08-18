@@ -15,22 +15,37 @@ class Simulation:
         self.z_0 = z_0
 
         kz_real_min = 2 * np.pi /  max_wavelength
-        kz2_real = self.prop.kz[:,None]**2 - self.prop.kr[None,:]**2
-        kz2_real[kz2_real<0.0] = 0.0
+        k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
+        cond = ( k_z2 > 0.0 )
+        prop.k_z = np.sqrt( k_z2, where=cond )
+        prop.k_z_inv = np.divide( 1., prop.k_z, where=cond )
+
+        k_z2 *= cond
+        prop.k_z *= cond
+        prop.k_z_inv *= cond
+
+        prop.omega = prop.kz[:, None] * c
+        cond = ( prop.omega > 0.0 )
+        prop.omega_inv = np.divide(1, prop.omega, where=cond)
+        prop.omega *= cond
+        prop.omega_inv *= cond
 
         if max_wavelength is not None:
-            DC_filter = 1.0 - np.exp(-0.5*(kz2_real/kz_real_min**2)**2)
-            self.DC_filter = self.prop.bcknd.to_device(DC_filter)
+            DC_filter = 1.0 - np.exp(-0.5*(k_z2/kz_real_min**2)**2)
+            self.DC_filter = prop.bcknd.to_device(DC_filter)
         else:
             self.DC_filter = None
 
+        prop.k_z = prop.bcknd.to_device(prop.k_z)
+        prop.k_z_inv = prop.bcknd.to_device(prop.k_z_inv)
+        prop.omega = prop.bcknd.to_device(prop.omega)
+        # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
+
     def step(self, En_ts, dz, physprocs=[], method='RK4'):
-        kp_z0 = 0.0
 
         k1 = 0.0
         for physproc in physprocs:
-            k1 += physproc.get_RHS( self, En_ts )
-            kp_z0 = physproc.kp_z0
+            k1 += physproc.get_RHS( En_ts )
 
         if method in ['Ralston', 'MP', 'RK4']:
             if method=='Ralston':
@@ -41,8 +56,7 @@ class Simulation:
             k2 = 0.0
             En_pre_ts = En_ts + C_k2 * dz * k1
             for physproc in physprocs:
-                k2 += physproc.get_RHS(
-                    self, En_pre_ts, C_k2 * dz)
+                k2 += physproc.get_RHS( En_pre_ts, C_k2 * dz )
 
         if method=='Euler':
             k_tot = k1
@@ -57,21 +71,19 @@ class Simulation:
             k3 = 0.0
             En_pre_ts = En_ts + 0.5 * dz * k2
             for physproc in physprocs:
-                k3 += physproc.get_RHS(
-                    self, En_pre_ts, 0.5 * dz)
+                k3 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
 
             En_pre_ts = En_ts + dz * k3
 
             k4 = 0.0
             for physproc in physprocs:
-                k4 += physproc.get_RHS(
-                    self, En_pre_ts, dz)
+                k4 += physproc.get_RHS( En_pre_ts, dz )
 
             k_tot = ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6
             k_lower = k2
 
         En_ts += dz * k_tot
-        En_ts = self.prop.step_simple(En_ts, dz, kp=kp_z0)
+        En_ts = self.prop.step_simple(En_ts, dz)
         if self.DC_filter is not None:
             En_ts *= self.DC_filter
 
