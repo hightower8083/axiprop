@@ -53,7 +53,6 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
         prop = self.sim.prop
         n_pe = self.n_pe * self.dens_func(
             sim.z_0 + dz, prop.r_new )[None,:]
-        n_pe = sim.prop.bcknd.to_device( n_pe )
 
         if dz != 0.0:
             sim.t_axis += dz / c
@@ -61,6 +60,7 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
         else:
             E_loc = prop.perform_iTST(E_ts)
 
+        n_pe = sim.prop.bcknd.to_device( n_pe * np.ones(E_loc.shape) )
         Jp_ts = sim.prop.perform_TST( E_loc * n_pe )
         Jp_ts *= self.coef_RHS
 

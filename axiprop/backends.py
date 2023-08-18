@@ -54,6 +54,10 @@ class BACKEND_NP():
     def to_device(self, arr_in, dtype=None):
         return arr_in
 
+    def sum(self, arr_in):
+        val_out = arr_in.sum()
+        return val_out
+
     def make_matmul(self, matrix_in, vec_in, vec_out):
         def matmul(a, b, c):
             c = np.dot(a, b, out=c)
@@ -143,6 +147,10 @@ try:
             arr_out = self.clmath.exp(arr_in, self.queue)
             return arr_out
 
+        def sum(self, arr_in):
+            val_out = self.arrcl.sum(arr_in).get().item()
+            return val_out
+
         def abs(self, arr):
             arr_out = arr.__abs__()
             return arr_out
@@ -215,6 +223,10 @@ try:
         def inv(self, M, dtype):
             M = self.cp.linalg.pinv(M)
             return M
+
+        def sum(self, arr_in):
+            val_out = self.cp.sum(arr_in).get().item()
+            return val_out
 
         def make_matmul(self, matrix_in, vec_in, vec_out):
             def matmul(a, b, c):

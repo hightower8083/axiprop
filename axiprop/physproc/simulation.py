@@ -8,13 +8,13 @@ class Simulation:
                  max_wavelength=4e-6):
 
         self.prop = prop
-        self.t_axis = t_axis.copy()
+
         self.k0 = k0
         self.omega0 = k0 * c
+        self.t_axis = t_axis.copy()
         self.EnvArgs = (self.k0, self.t_axis, n_dump)
         self.z_0 = z_0
 
-        kz_real_min = 2 * np.pi /  max_wavelength
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
         prop.k_z = np.sqrt( k_z2, where=cond )
@@ -31,7 +31,8 @@ class Simulation:
         prop.omega_inv *= cond
 
         if max_wavelength is not None:
-            DC_filter = 1.0 - np.exp(-0.5*(k_z2/kz_real_min**2)**2)
+            k_z_min = 2 * np.pi /  max_wavelength
+            DC_filter = 1.0 - np.exp( -0.5 * ( k_z2 / k_z_min**2 )**2 )
             self.DC_filter = prop.bcknd.to_device(DC_filter)
         else:
             self.DC_filter = None
@@ -42,6 +43,8 @@ class Simulation:
         # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
     def step(self, En_ts, dz, physprocs=[], method='RK4'):
+
+        bcknd = self.prop.bcknd
 
         k1 = 0.0
         for physproc in physprocs:
@@ -90,12 +93,11 @@ class Simulation:
         self.t_axis += dz / c
         self.z_0 += dz
 
-        val_intgral = 0.5 * (
-            self.prop.bcknd.abs(k_tot).sum() \
-            + self.prop.bcknd.abs(k_lower).sum()
-            ).get()
+        val_intgral = 0.5 * bcknd.sum(
+            bcknd.abs(k_tot) + bcknd.abs(k_lower)
+        )
 
-        err_abs = 0.5 * self.prop.bcknd.abs(k_tot-k_lower).sum().get()
+        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
 
         if val_intgral>0:
             err = err_abs / val_intgral
