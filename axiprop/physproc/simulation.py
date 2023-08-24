@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0
+from tqdm.auto import tqdm
 from ..containers import ScalarFieldEnvelope
 
 
@@ -14,6 +15,7 @@ class Simulation:
         self.t_axis = t_axis.copy()
         self.EnvArgs = (self.k0, self.t_axis, n_dump)
         self.z_0 = z_0
+        self.z_loc = z_0
 
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
@@ -24,18 +26,19 @@ class Simulation:
         prop.k_z *= cond
         prop.k_z_inv *= cond
 
+        if max_wavelength is not None:
+            k_z_min = 2 * np.pi /  max_wavelength
+            DC_filter = 1.0 - np.exp( -0.5 * ( k_z2 / k_z_min**2 )**2 )
+            DC_filter *= cond
+            self.DC_filter = prop.bcknd.to_device(DC_filter)
+        else:
+            self.DC_filter = None
+
         prop.omega = prop.kz[:, None] * c
         cond = ( prop.omega > 0.0 )
         prop.omega_inv = np.divide(1, prop.omega, where=cond)
         prop.omega *= cond
         prop.omega_inv *= cond
-
-        if max_wavelength is not None:
-            k_z_min = 2 * np.pi /  max_wavelength
-            DC_filter = 1.0 - np.exp( -0.5 * ( k_z2 / k_z_min**2 )**2 )
-            self.DC_filter = prop.bcknd.to_device(DC_filter)
-        else:
-            self.DC_filter = None
 
         prop.k_z = prop.bcknd.to_device(prop.k_z)
         prop.k_z_inv = prop.bcknd.to_device(prop.k_z_inv)
@@ -91,7 +94,7 @@ class Simulation:
             En_ts *= self.DC_filter
 
         self.t_axis += dz / c
-        self.z_0 += dz
+        self.z_loc += dz
 
         val_intgral = 0.5 * bcknd.sum(
             bcknd.abs(k_tot) + bcknd.abs(k_lower)
@@ -106,21 +109,6 @@ class Simulation:
 
         return En_ts, err
 
-    def adjust_dz( self, dz, err, dz_min=1e-6, err_max=1e-4, err_min=0.0,
-                   damp_rate=0.7, growth_rate=1.01):
-        if err>err_max:
-            dz *= damp_rate
-
-        if err<err_min:
-            dz *= 1 / damp_rate
-
-        dz *= growth_rate
-
-        if dz<dz_min:
-            dz = dz_min
-
-        return dz
-
     def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2, growth_rate=1.01):
 
         if err_max<err:
@@ -133,3 +121,15 @@ class Simulation:
             dz = dz_min
 
         return dz
+
+    def pbar_init(self, Lz):
+        tqdm_bar_format = '{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
+        self.pbar = tqdm(total=100, bar_format=tqdm_bar_format)
+        self.Lz = Lz
+
+    def pbar_update(self, dz):
+        # update progress bar
+        self.pbar.update(dz/self.Lz * 100)
+        print("".join( 79 * [' '] ), end='\r', flush=True)
+        print(f'z = {(self.z_loc-self.z_0)*1e3:.3f} mm; dz = {dz*1e6:.3f} um',
+              end='\r', flush=True)

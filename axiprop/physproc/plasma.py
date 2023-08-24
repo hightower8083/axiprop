@@ -30,7 +30,7 @@ class PlasmaSimple:
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
         prop = self.sim.prop
-        n_pe_z = self.n_pe * self.dens_func( sim.z_0 + dz, prop.r_new )[0]
+        n_pe_z = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new )[0]
 
         if dz != 0.0:
             sim.t_axis += dz / c
@@ -52,7 +52,7 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
         sim = self.sim
         prop = self.sim.prop
         n_pe = self.n_pe * self.dens_func(
-            sim.z_0 + dz, prop.r_new )[None,:]
+            sim.z_loc + dz, prop.r_new )[None,:]
 
         if dz != 0.0:
             sim.t_axis += dz / c
@@ -82,7 +82,7 @@ class PlasmaRelativistic:
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
         prop = self.sim.prop
-        n_pe = self.n_pe * self.dens_func( sim.z_0 + dz, prop.r_new )[None,:]
+        n_pe = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new )[None,:]
 
         if dz != 0.0:
             sim.t_axis += dz / c
@@ -117,6 +117,7 @@ class PlasmaIonization(PlasmaRelativistic):
                   Z_init=0, Zmax=-1, ionization_current=True):
 
         super().__init__(n_gas, dens_func, sim)
+        self.n_gas = n_gas
 
         self.Z_init = Z_init
         self.Zmax = Zmax
@@ -145,16 +146,16 @@ class PlasmaIonization(PlasmaRelativistic):
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
         self.Uion = Uion
 
-    def get_RHS(self, sim, E_ts, dz=0.0 ):
+    def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
         prop = self.sim.prop
         omega = sim.prop.kz[:, None] * c
 
-        n_gas = self.n_gas * self.dens_func( sim.z_0 + dz, prop.r_new )
+        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, prop.r_new )
 
         if dz != 0.0:
             sim.t_axis += dz / c
-            E_loc = sim.prop.prop.step_and_iTST_transfer(E_ts, dz)
+            E_loc = prop.step_and_iTST_transfer(E_ts, dz)
         else:
             E_loc = prop.perform_iTST_transfer(E_ts)
 
@@ -180,7 +181,7 @@ class PlasmaIonization(PlasmaRelativistic):
 
         if dz != 0.0:
             sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz)
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
 
         Jp_ts *= self.coef_RHS
 
@@ -239,7 +240,7 @@ class PlasmaIonizationOFI:
         r_axis = sim.prop.r_new
         omega = sim.prop.kz[:, None] * c
 
-        n_gas = self.n_gas * self.dens_func( sim.z_0 + dz, r_axis )
+        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, r_axis )
         self.kp_z0 = 0.0
 
         if dz != 0.0:
