@@ -109,13 +109,19 @@ class Simulation:
 
         return En_ts, err
 
-    def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2, growth_rate=1.01):
+    def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2,
+                growth_rate=None):
 
-        if err_max<err:
-            ErrFact = err_max / err
-            dz *= 0.9 * ErrFact**0.5
+        if growth_rate is None:
+            if err>0:
+                ErrFact = err_max / err
+                dz *= 0.98 * ErrFact**0.5
         else:
-            dz *= growth_rate
+            if err_max<err:
+                ErrFact = err_max / err
+                dz *= 0.9 * ErrFact**0.5
+            else:
+                dz *= growth_rate
 
         if dz<dz_min:
             dz = dz_min

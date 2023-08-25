@@ -21,7 +21,7 @@ UH = table_element('H').ionenergies[1]
 
 class PlasmaSimple:
 
-    def __init__(self, n_pe, dens_func, sim ):
+    def __init__(self, n_pe, dens_func, sim, **kw_args):
         self.n_pe = n_pe
         self.dens_func = dens_func
         self.sim = sim
@@ -73,7 +73,7 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
 
 class PlasmaRelativistic:
 
-    def __init__(self, n_pe, dens_func, sim):
+    def __init__(self, n_pe, dens_func, sim, **kw_args):
         self.n_pe = n_pe
         self.dens_func = dens_func
         self.sim = sim
@@ -114,7 +114,8 @@ class PlasmaRelativistic:
 class PlasmaIonization(PlasmaRelativistic):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
-                  Z_init=0, Zmax=-1, ionization_current=True):
+                  Z_init=0, Zmax=-1, ionization_current=True,
+                  **kw_args):
 
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
@@ -144,7 +145,7 @@ class PlasmaIonization(PlasmaRelativistic):
         self.adk_prefactor = omega_a * C2 * ( Uion/(2*UH) ) \
                     * ( 2 * (Uion/UH)**(3./2) * Ea )**(2*n_eff - 1)
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
-        self.Uion = Uion
+        self.Uion = e * Uion # convert to Joules
 
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
