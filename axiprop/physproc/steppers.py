@@ -131,7 +131,6 @@ class StepperNonParaxialPlasma:
 
         return u_out
 
-
     def perform_transfer_TST(self, u):
         """
         Initiate the stepped propagation mode. This mode allows

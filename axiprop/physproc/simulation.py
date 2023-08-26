@@ -2,11 +2,13 @@ import numpy as np
 from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0
 from tqdm.auto import tqdm
 from ..containers import ScalarFieldEnvelope
-
+from ..utils import refine1d
 
 class Simulation:
-    def __init__(self, prop, t_axis, k0, z_0, n_dump=0,
-                 max_wavelength=4e-6):
+    def __init__(self, prop, t_axis, k0, z_0,
+                 diag_fields=('E_t_env', 'Energy'),
+                 n_dump=4, refine_ord=1,
+                 max_wavelength=4e-6, verbose=True):
 
         self.prop = prop
 
@@ -45,7 +47,63 @@ class Simulation:
         prop.omega = prop.bcknd.to_device(prop.omega)
         # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
-    def step(self, En_ts, dz, physprocs=[], method='RK4'):
+        self.diags = {}
+        for diag_str in tuple(diag_fields) + ('z_axis',):
+            self.diags[diag_str] = []
+        self.refine_ord = refine_ord
+
+        self.verbose = verbose
+
+    def run(self, E0, physprocs, Lz, dz0, N_diags):
+
+        if np.isnan(self.prop.k_z.get()).sum() > 0:
+            print('data corruption! reload propagator and simulation')
+            return
+
+        # field in Fourier-Bessel space (updated by simulation)
+        En_ts = self.prop.perform_transfer_TST(E0)
+        dz = dz0
+
+        # lists to be filled numerical error data
+        self.z_axis_err = []
+        self.errors = []
+
+        z_diag = np.linspace(self.z_0, self.z_0 + Lz, N_diags)
+        do_diag_next = False
+
+        # simulation loop
+        if self.verbose:
+            self._pbar_init(Lz)
+
+        while (self.z_loc < self.z_0 + Lz) :
+            # record diagnostics data
+            if do_diag_next:
+                self._record_diags(En_ts)
+                do_diag_next = False
+
+            # simulation step
+            En_ts, err = self._step(
+                En_ts, dz,
+                physprocs=physprocs
+            )
+
+            # record error data
+            self.errors.append(err)
+            self.z_axis_err.append(self.z_loc)
+
+            # adjust dz to the error (comment if not needed)
+            dz = self._opt_dz(dz, err)
+
+            # adjust dz to diags
+            if self.z_loc <= z_diag[-1] - dz:
+                dz, do_diag_next = self._match_dz_to_diags( dz, z_diag)
+
+            if self.verbose:
+               self._pbar_update(dz)
+
+        print('End of simulation')
+
+    def _step(self, En_ts, dz, physprocs=[], method='RK4'):
 
         bcknd = self.prop.bcknd
 
@@ -109,17 +167,49 @@ class Simulation:
 
         return En_ts, err
 
-    def opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2,
+    def _record_diags(self, E_fb):
+        self.diags['z_axis'].append(self.z_loc)
+        E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
+
+        E_obj = ScalarFieldEnvelope(*self.EnvArgs).import_field_ft(
+            E_ft, r=self.prop.r_new )
+
+        if 'E_ft' in self.diags.keys():
+            self.diags['E_ft'].append(E_obj.Field_ft)
+
+        if 'E_ft_onax' in self.diags.keys():
+            self.diags['E_ft'].append(E_obj.Field_ft[:, 0])
+
+        if 'E_t_env' in self.diags.keys():
+            self.diags['E_t_env'].append(E_obj.Field)
+
+        if 'E_t_env_onax' in self.diags.keys():
+            self.diags['E_t_env_onax'].append(E_obj.Field[:, 0])
+
+        if 'E_t_onax' in self.diags.keys():
+            t_axis_refine = refine1d(self.t_axis, self.refine_ord).real
+            phs = np.exp(-1j * t_axis_refine * c * self.k0)
+            self.diags['E_t_onax'].append(
+                np.real(refine1d(E_obj.Field[:,0], self.refine_ord) * phs )
+            )
+
+        if 'Energy_ft' in self.diags.keys():
+            self.diags['Energy_ft'].append(E_obj.Energy_ft)
+
+        if 'Energy' in self.diags.keys():
+            self.diags['Energy'].append(E_obj.Energy)
+
+    def _opt_dz( self, dz, err, dz_min=2e-6, err_max=1e-2,
                 growth_rate=None):
 
         if growth_rate is None:
             if err>0:
                 ErrFact = err_max / err
-                dz *= 0.98 * ErrFact**0.5
+                dz *= 0.95 * ErrFact**0.5
         else:
             if err_max<err:
                 ErrFact = err_max / err
-                dz *= 0.9 * ErrFact**0.5
+                dz *= 0.95 * ErrFact**0.5
             else:
                 dz *= growth_rate
 
@@ -128,14 +218,32 @@ class Simulation:
 
         return dz
 
-    def pbar_init(self, Lz):
+    def _match_dz_to_diags( self, dz, z_diags):
+        dz_to_next_diag = z_diags[z_diags>self.z_loc][0] - self.z_loc
+
+        if dz_to_next_diag < dz:
+            dz = dz_to_next_diag
+            do_diag_next = True
+        else:
+            do_diag_next = False
+
+        return dz, do_diag_next
+
+    def _pbar_init(self, Lz):
         tqdm_bar_format = '{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
         self.pbar = tqdm(total=100, bar_format=tqdm_bar_format)
         self.Lz = Lz
 
-    def pbar_update(self, dz):
+    def _pbar_update(self, dz):
         # update progress bar
         self.pbar.update(dz/self.Lz * 100)
         print("".join( 79 * [' '] ), end='\r', flush=True)
         print(f'z = {(self.z_loc-self.z_0)*1e3:.3f} mm; dz = {dz*1e6:.3f} um',
               end='\r', flush=True)
+
+    def diags_to_numpy(self):
+        for diag_str in self.diags.keys():
+            self.diags[diag_str] = np.asarray(self.diags[diag_str])
+
+        self.errors = np.asarray(self.errors)
+        self.z_axis_err = np.asarray(self.z_axis_err)
