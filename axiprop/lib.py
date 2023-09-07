@@ -396,7 +396,7 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
 class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, Nkr_new=None,
-                 N_pad=4, mode=0, dtype=np.complex128,
+                 N_pad=1, mode=0, dtype=np.complex128,
                  backend=None, verbose=True):
         """
         The resampling RT propagator.
@@ -504,7 +504,8 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         kr = self.kr
 
         _norm_coef = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
-        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) * _norm_coef[None,:]
+        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) \
+            * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:Nr]
 

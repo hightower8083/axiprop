@@ -1,13 +1,14 @@
 import numpy as np
 from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0
 from tqdm.auto import tqdm
-from ..containers import ScalarFieldEnvelope
+from ..containers import ScalarFieldEnvelope, apply_boundary_r
 from ..utils import refine1d
 
 class Simulation:
     def __init__(self, prop, t_axis, k0, z_0,
                  diag_fields=('E_t_env', 'Energy'),
                  n_dump=4, refine_ord=1,
+                 open_boundaries_r=False,
                  max_wavelength=4e-6, verbose=True):
 
         self.prop = prop
@@ -18,6 +19,7 @@ class Simulation:
         self.EnvArgs = (self.k0, self.t_axis, n_dump)
         self.z_0 = z_0
         self.z_loc = z_0
+        self.open_boundaries_r = open_boundaries_r
 
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
@@ -35,6 +37,11 @@ class Simulation:
             self.DC_filter = prop.bcknd.to_device(DC_filter)
         else:
             self.DC_filter = None
+
+        if open_boundaries_r:
+            r_dump = np.linspace(0, 1, n_dump)
+            self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+            self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
         prop.omega = prop.kz[:, None] * c
         cond = ( prop.omega > 0.0 )
@@ -54,7 +61,7 @@ class Simulation:
 
         self.verbose = verbose
 
-    def run(self, E0, physprocs, Lz, dz0, N_diags):
+    def run(self, E0, physprocs, Lz, dz0, N_diags, adjust_dz=True):
 
         if np.isnan(self.prop.k_z.get()).sum() > 0:
             print('data corruption! reload propagator and simulation')
@@ -91,8 +98,11 @@ class Simulation:
             self.errors.append(err)
             self.z_axis_err.append(self.z_loc)
 
-            # adjust dz to the error (comment if not needed)
-            dz = self._opt_dz(dz, err)
+            # adjust dz to the error
+            if adjust_dz:
+                dz = self._opt_dz(dz, err)
+            else:
+                dz = dz0
 
             # adjust dz to diags
             if self.z_loc <= z_diag[-1] - dz:
@@ -150,6 +160,11 @@ class Simulation:
         En_ts = self.prop.step_simple(En_ts, dz)
         if self.DC_filter is not None:
             En_ts *= self.DC_filter
+
+        if self.open_boundaries_r:
+            En_r_space = self.prop.perform_iTST(En_ts)
+            En_r_space = apply_boundary_r(En_r_space, self.dump_mask)
+            En_ts = self.prop.perform_TST(En_r_space)
 
         self.t_axis += dz / c
         self.z_loc += dz

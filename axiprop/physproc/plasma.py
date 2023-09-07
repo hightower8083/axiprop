@@ -115,21 +115,23 @@ class PlasmaIonization(PlasmaRelativistic):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  **kw_args):
+                  ionization_mode='AC', **kw_args):
 
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
 
         self.Z_init = Z_init
         self.Zmax = Zmax
-        self.make_ADK(my_element)
+        self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
 
-    def make_ADK(self, my_element):
+    def make_ADK(self, my_element, ionization_mode):
         """
         Prepare the useful data for ADK probabplity calculation for a given
-        element. This part is mostly a copy-pased from FBPIC
-        [https://github.com/fbpic/fbpic]
+        element. This part is mostly a copy-pased from FBPIC code
+        [https://github.com/fbpic/fbpic] but corrected for the enveloped
+        field following approach of SMILEI ionization
+        [https://smileipic.github.io/Smilei/Understand/ionization.html]
         """
 
         Uion = np.array(list(table_element(my_element).ionenergies.values()))
@@ -141,9 +143,17 @@ class PlasmaIonization(PlasmaRelativistic):
         C2 = 2**(2*n_eff) / (n_eff * gamma_func(n_eff+l_eff+1) * \
             gamma_func(n_eff-l_eff))
 
-        self.adk_power = - (2*n_eff - 1)
-        self.adk_prefactor = omega_a * C2 * ( Uion/(2*UH) ) \
-                    * ( 2 * (Uion/UH)**(3./2) * Ea )**(2*n_eff - 1)
+        if ionization_mode == 'AC':
+            self.adk_power = - (2*n_eff - 1.5)
+            self.adk_prefactor = (3/np.pi)**0.5 * omega_a * C2 * \
+                ( Uion/(2*UH) ) * ( 2 * (Uion/UH)**1.5 * Ea )**(2*n_eff - 1.5)
+        elif ionization_mode == 'DC':
+            self.adk_power = - (2*n_eff - 1)
+            self.adk_prefactor = omega_a * C2 * ( Uion/(2*UH) ) \
+                * ( 2 * (Uion/UH)**1.5 * Ea )**(2*n_eff - 1)
+        else:
+            print("`ionization_mode` must be `AC` or `DC`")
+
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
         self.Uion = e * Uion # convert to Joules
 
@@ -163,9 +173,9 @@ class PlasmaIonization(PlasmaRelativistic):
         A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
 
-        E_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
+        E_loc_t = ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
             E_loc).Field
-        A_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
+        A_loc_t = ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
             A_loc).Field
 
         dt = sim.t_axis[1] - sim.t_axis[0]
@@ -173,7 +183,8 @@ class PlasmaIonization(PlasmaRelativistic):
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
             E_loc_t, A_loc_t, dt, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current)
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        )
 
         Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
             Jp_loc_t ).Field_ft
@@ -187,7 +198,6 @@ class PlasmaIonization(PlasmaRelativistic):
         Jp_ts *= self.coef_RHS
 
         return Jp_ts
-
 
 class PlasmaIonizationOFI:
 
@@ -208,7 +218,6 @@ class PlasmaIonizationOFI:
         element. This part is mostly a copy-pased from FBPIC code
         [https://github.com/fbpic/fbpic]
         """
-
         Uion = np.array(list(table_element(my_element).ionenergies.values()))
         Z_states = np.arange( Uion.size ) + 1
 

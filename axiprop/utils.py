@@ -10,6 +10,8 @@ import numpy as np
 from scipy.constants import c, e, m_e
 from scipy.interpolate import interp1d
 
+from axiprop.containers import ScalarFieldEnvelope
+
 # try import numba and make dummy methods if cannot
 try:
     from numba import njit, prange
@@ -22,23 +24,6 @@ except Exception:
                    "function greatly accelerated")
             return func(*args, **kw_args)
         return func_wrp
-
-"""
-def refine_1d(A, refine_ord):
-    refine_ord = int(refine_ord)
-    x = np.arange(A.size, dtype=np.double)
-    x_new = np.linspace(x.min(), x.max(), x.size*refine_ord)
-
-    interp_fu_abs = interp1d(x, np.abs(A), assume_sorted=True)
-    slice_abs = interp_fu_abs(x_new)
-
-    interp_fu_angl = interp1d(x, np.unwrap(np.angle(A)), assume_sorted=True)
-    slice_angl = interp_fu_angl(x_new)
-
-    A_new = slice_abs * np.exp(1j * slice_angl)
-    return A_new
-"""
-
 
 def refine1d(A, refine_ord):
     refine_ord = int(refine_ord)
@@ -81,7 +66,6 @@ def refine1d_TR(A, refine_ord):
         A_new[:, ir] = slice_abs * np.exp(1j * slice_angl)
 
     return A_new
-
 
 @njit
 def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
@@ -214,6 +198,26 @@ def get_temporal_3d(u, t, kz):
                 u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
 
     return u_t
+
+def export_from_lasy(laser):
+    time_axis_indx = -1
+    omega0 = laser.profile.omega0
+    t_axis = laser.grid.axes[time_axis_indx]
+
+    if dim == "rt":
+        Container = []
+        for i_m in range( laser.grid.azimuthal_modes.size ):
+            Container.append(
+                ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+                    np.transpose(laser.grid.field[i_m]).copy()
+                )
+            )
+    else:
+        Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+            np.transpose(grid.field).copy()
+        )
+
+    return Container
 
 #### FBPIC profile
 @njit
