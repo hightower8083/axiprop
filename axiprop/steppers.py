@@ -57,6 +57,9 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
             self.TST()
 
@@ -109,6 +112,9 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc = self.bcknd.to_device(u[ikz].copy())
             self.TST()
             k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
@@ -165,6 +171,9 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc = self.bcknd.to_device(u[ikz].copy())
             self.TST()
 
@@ -343,6 +352,9 @@ class StepperFresnel:
         self.check_new_grid(dz_min)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc[:] = self.bcknd.to_device(u[ikz,:].copy())
             self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
             self.TST()

@@ -74,6 +74,8 @@ class StepperNonParaxialPlasma:
             u_out = self.bcknd.zeros( image.shape, self.dtype )
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
             phase_term = self.k_z[ikz]
             u_out[ikz] = image[ikz] * self.bcknd.exp(1j * dz * phase_term)
 
@@ -99,6 +101,9 @@ class StepperNonParaxialPlasma:
             u_out = self.bcknd.zeros( out_shape, self.dtype )
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             phase_term = self.k_z[ikz]
             self.u_ht[:] = image[ikz] * self.bcknd.exp(1j * dz * phase_term)
             self.iTST()
@@ -173,6 +178,9 @@ class StepperNonParaxialPlasma:
                               dtype=self.dtype)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             phase_term = self.k_z[ikz]
             self.u_ht[:] = image[ikz] * self.bcknd.exp(1j * dz * phase_term)
             self.iTST()

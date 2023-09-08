@@ -122,6 +122,7 @@ class PlasmaIonization(PlasmaRelativistic):
 
         self.Z_init = Z_init
         self.Zmax = Zmax
+        self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
 
@@ -178,10 +179,8 @@ class PlasmaIonization(PlasmaRelativistic):
         A_loc_t = ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
             A_loc).Field
 
-        dt = sim.t_axis[1] - sim.t_axis[0]
-
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
-            E_loc_t, A_loc_t, dt, n_gas,
+            E_loc_t, A_loc_t, self.dt, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
             self.Uion, self.Z_init, self.Zmax, self.ionization_current
         )

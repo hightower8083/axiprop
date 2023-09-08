@@ -26,6 +26,9 @@ class Simulation:
         prop.k_z = np.sqrt( k_z2, where=cond )
         prop.k_z_inv = np.divide( 1., prop.k_z, where=cond )
 
+        prop.k_z = np.nan_to_num(prop.k_z)
+        prop.k_z_inv = np.nan_to_num(prop.k_z_inv)
+
         k_z2 *= cond
         prop.k_z *= cond
         prop.k_z_inv *= cond
@@ -46,6 +49,8 @@ class Simulation:
         prop.omega = prop.kz[:, None] * c
         cond = ( prop.omega > 0.0 )
         prop.omega_inv = np.divide(1, prop.omega, where=cond)
+        prop.omega_inv = np.nan_to_num(prop.omega_inv)
+
         prop.omega *= cond
         prop.omega_inv *= cond
 
@@ -55,13 +60,14 @@ class Simulation:
         # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
         self.diags = {}
-        for diag_str in tuple(diag_fields) + ('z_axis',):
+        for diag_str in tuple(diag_fields) + ('z_axis', 'n_e', 'T_e'):
             self.diags[diag_str] = []
         self.refine_ord = refine_ord
 
         self.verbose = verbose
 
-    def run(self, E0, physprocs, Lz, dz0, N_diags, adjust_dz=True):
+    def run(self, E0, Lz, dz0, N_diags, physprocs=[],
+            method='RK4', adjust_dz=True):
 
         if np.isnan(self.prop.k_z.get()).sum() > 0:
             print('data corruption! reload propagator and simulation')
@@ -85,13 +91,14 @@ class Simulation:
         while (self.z_loc < self.z_0 + Lz) :
             # record diagnostics data
             if do_diag_next:
-                self._record_diags(En_ts)
+                self._record_diags(En_ts, physprocs)
                 do_diag_next = False
 
             # simulation step
             En_ts, err = self._step(
                 En_ts, dz,
-                physprocs=physprocs
+                physprocs,
+                method
             )
 
             # record error data
@@ -99,7 +106,7 @@ class Simulation:
             self.z_axis_err.append(self.z_loc)
 
             # adjust dz to the error
-            if adjust_dz:
+            if adjust_dz and err>0:
                 dz = self._opt_dz(dz, err)
             else:
                 dz = dz0
@@ -113,7 +120,7 @@ class Simulation:
 
         print('End of simulation')
 
-    def _step(self, En_ts, dz, physprocs=[], method='RK4'):
+    def _step(self, En_ts, dz, physprocs, method):
 
         bcknd = self.prop.bcknd
 
@@ -157,9 +164,11 @@ class Simulation:
             k_lower = k2
 
         En_ts += dz * k_tot
-        En_ts = self.prop.step_simple(En_ts, dz)
+
         if self.DC_filter is not None:
             En_ts *= self.DC_filter
+
+        En_ts = self.prop.step_simple(En_ts, dz)
 
         if self.open_boundaries_r:
             En_r_space = self.prop.perform_iTST(En_ts)
@@ -182,12 +191,18 @@ class Simulation:
 
         return En_ts, err
 
-    def _record_diags(self, E_fb):
+    def _record_diags(self, E_fb, physprocs):
         self.diags['z_axis'].append(self.z_loc)
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
         E_obj = ScalarFieldEnvelope(*self.EnvArgs).import_field_ft(
             E_ft, r=self.prop.r_new )
+
+        for physproc in physprocs:
+            if hasattr(physproc, 'n_e'):
+                self.diags['n_e'].append(physproc.n_e)
+            if hasattr(physproc, 'T_e'):
+                self.diags['T_e'].append(physproc.T_e)
 
         if 'E_ft' in self.diags.keys():
             self.diags['E_ft'].append(E_obj.Field_ft)

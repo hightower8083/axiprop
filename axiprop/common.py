@@ -231,17 +231,21 @@ class CommonTools:
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                                  fill_value='extrapolate',
                                  kind='cubic',
+                                 assume_sorted=True,
                                  bounds_error=False )
 
         interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
                                   fill_value='extrapolate',
                                   kind='cubic',
+                                  assume_sorted=True,
                                   bounds_error=False )
 
         u_slice_abs = interp_fu_abs(r_new)
         u_slice_angl = interp_fu_angl(r_new)
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        u_slice_new *= (r_new <= r_loc.max() )
+
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):

@@ -536,10 +536,18 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.r_new =  dz * self.kr[:self.Nr_new] / self.kz.max()
 
         r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
+
         if self.r_new.max()>r_loc_min.max():
             Nkr = int(self.r_new.max() / np.diff(r_loc_min).mean())
+            kz_max = self.kz[
+                self.kz > dz * self.kr[self.Nkr_new-1] / self.r_new.max()
+            ][0]
+
+            lambda_min = 2 * np.pi / kz_max
+
             warnings.warn(
-                "Extrapolation will be used and may cause noise. "
+                "New radius is not fully resolved, so some data for the "
+                + f"wavelengths below {lambda_min*1e9:g} nm may be lost. "
                 + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
 

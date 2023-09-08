@@ -1,9 +1,9 @@
 import numpy as np
-from numba import njit, prange
+from numba import jit, prange
 from scipy.constants import e, m_e, c, pi, mu_0
 from scipy.constants import epsilon_0, fine_structure
 
-@njit
+@jit(nopython=True, cache=True)
 def get_ADK_probability(E_fld, dt, adk_power, \
                         adk_prefactor, adk_exp_prefactor):
     """
@@ -17,7 +17,7 @@ def get_ADK_probability(E_fld, dt, adk_power, \
         Propab += 1. - np.exp( - W_rate * dt )
     return Propab
 
-@njit(parallel=True)
+@jit(nopython=True, cache=True, parallel=True)
 def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                     Z_init, Zmax, ionization_current ):
 
@@ -55,9 +55,6 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
 
             probs = get_ADK_probability( np.abs( E_ir_t[it] ), dt, *pack_ADK )
 
-            v_follow = P_loc[it:] / m_e / \
-                np.sqrt( 1 + 0.5 * np.abs(P_loc[it:])**2 / (m_e*c)**2 )
-
             for ion_state in range(num_ions-1):
                 new_events = ion_fracts_loc[ion_state] * probs[ion_state]
                 if new_events>0:
@@ -66,18 +63,21 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                     all_new_events += new_events
 
                     if ionization_current:
+                        T_e[ir] += n_gas_loc * new_events * Uion[ion_state]
+
                         J_ion = n_gas_loc * new_events \
                             * Uion[ion_state] / E_ir_t[it] / dt
+
                         J_ir_t[it] += J_ion
 
-                    J_ir_t[it:] += -e * new_events * n_gas_loc * v_follow
+                    J_ir_t[it:] += -e * new_events * n_gas_loc * v_loc[it:]
 
         n_e[ir] =  all_new_events * n_gas_loc
         J_plasma[:, ir] = J_ir_t.copy()
 
     return J_plasma, n_e, T_e
 
-@njit(parallel=True)
+@jit(nopython=True, cache=True, parallel=True)
 def get_plasma_ADK_OFI(
     E_laser, A_laser, t_axis, omega0, n_gas, pack_ADK, Uion,
     Z_init=0, Zmax=-1, ionization_current=True ):
