@@ -215,7 +215,7 @@ class ScalarFieldEnvelope:
         return Energy
 
     def import_field(self, Field, t_loc=None, r=None,
-                     transform=True):
+                     transform=True, make_copy=False):
         """
         Import the field from the temporal domain
 
@@ -245,7 +245,11 @@ class ScalarFieldEnvelope:
         elif len(Field[0].shape)==2:
             self.k_freq_base_shaped = self.k_freq_base[:, None, None]
 
-        self.Field = Field
+        if make_copy:
+            self.Field = Field.copy()
+        else:
+            self.Field = Field
+
         self.r_shape = Field[0].shape
 
         if transform:
@@ -255,7 +259,9 @@ class ScalarFieldEnvelope:
 
         return self
 
-    def import_field_ft(self, Field, t_loc=None, r=None, transform=True):
+    def import_field_ft(self, Field, t_loc=None, r=None,
+                        transform=True, clean_boundaries=False,
+                        make_copy=False):
         """
         Import the field from the frequency domain
 
@@ -281,7 +287,11 @@ class ScalarFieldEnvelope:
             self.r = r
 
         self.r_shape = Field[0].shape
-        self.Field_ft = Field
+
+        if make_copy:
+            self.Field_ft = Field.copy()
+        else:
+            self.Field_ft = Field
 
         if len(Field[0].shape)==1:
             self.k_freq_base_shaped = self.k_freq_base[:, None]
@@ -290,6 +300,10 @@ class ScalarFieldEnvelope:
 
         if transform:
             self.frequency_to_time()
+            if clean_boundaries:
+                self.Field = apply_boundary_t(self.Field, self.dump_mask)
+                self.Field = apply_boundary_r(self.Field, self.dump_mask)
+                self.time_to_frequency()
 
         return self
 

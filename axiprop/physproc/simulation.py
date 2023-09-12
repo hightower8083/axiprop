@@ -7,31 +7,40 @@ from ..utils import refine1d
 class Simulation:
     def __init__(self, prop, t_axis, k0, z_0,
                  diag_fields=('E_t_env', 'Energy'),
-                 n_dump=4, refine_ord=1,
+                 n_dump_current=0,
+                 n_dump_field=0,
                  open_boundaries_r=False,
-                 max_wavelength=4e-6, verbose=True):
+                 max_wavelength=4e-6,
+                 refine_ord=1,
+                 verbose=True):
 
         self.prop = prop
 
         self.k0 = k0
         self.omega0 = k0 * c
         self.t_axis = t_axis.copy()
-        self.EnvArgs = (self.k0, self.t_axis, n_dump)
+        self.EnvArgs = (self.k0, self.t_axis, n_dump_current)
         self.z_0 = z_0
         self.z_loc = z_0
         self.open_boundaries_r = open_boundaries_r
 
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
-        prop.k_z = np.sqrt( k_z2, where=cond )
-        prop.k_z_inv = np.divide( 1., prop.k_z, where=cond )
 
-        prop.k_z = np.nan_to_num(prop.k_z)
-        prop.k_z_inv = np.nan_to_num(prop.k_z_inv)
+        if not hasattr(prop, 'k_z') :
+            prop.k_z = np.sqrt( k_z2, where=cond )
+            prop.k_z_inv = np.divide( 1., prop.k_z, where=cond )
+
+            prop.k_z = np.nan_to_num(prop.k_z)
+            prop.k_z_inv = np.nan_to_num(prop.k_z_inv)
+
+            prop.k_z *= cond
+            prop.k_z_inv *= cond
+
+            prop.k_z = prop.bcknd.to_device(prop.k_z)
+            prop.k_z_inv = prop.bcknd.to_device(prop.k_z_inv)
 
         k_z2 *= cond
-        prop.k_z *= cond
-        prop.k_z_inv *= cond
 
         if max_wavelength is not None:
             k_z_min = 2 * np.pi /  max_wavelength
@@ -42,22 +51,22 @@ class Simulation:
             self.DC_filter = None
 
         if open_boundaries_r:
-            r_dump = np.linspace(0, 1, n_dump)
-            self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+            self.dump_mask = np.zeros(n_dump_field)
+            r_dump = np.linspace(0, 1, n_dump_field//2)
+            self.dump_mask[:n_dump_field//2] = ( 1 - np.exp(-(2 * r_dump)**6) )[::-1]
             self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
-        prop.omega = prop.kz[:, None] * c
-        cond = ( prop.omega > 0.0 )
-        prop.omega_inv = np.divide(1, prop.omega, where=cond)
-        prop.omega_inv = np.nan_to_num(prop.omega_inv)
+        if not hasattr(prop, 'omega') :
+            prop.omega = prop.kz[:, None] * c
+            cond = ( prop.omega > 0.0 )
+            prop.omega_inv = np.divide(1, prop.omega, where=cond)
+            prop.omega_inv = np.nan_to_num(prop.omega_inv)
 
-        prop.omega *= cond
-        prop.omega_inv *= cond
+            prop.omega *= cond
+            prop.omega_inv *= cond
 
-        prop.k_z = prop.bcknd.to_device(prop.k_z)
-        prop.k_z_inv = prop.bcknd.to_device(prop.k_z_inv)
-        prop.omega = prop.bcknd.to_device(prop.omega)
-        # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
+            prop.omega = prop.bcknd.to_device(prop.omega)
+            # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
         self.diags = {}
         for diag_str in tuple(diag_fields) + ('z_axis', 'n_e', 'T_e'):
@@ -67,11 +76,8 @@ class Simulation:
         self.verbose = verbose
 
     def run(self, E0, Lz, dz0, N_diags, physprocs=[],
-            method='RK4', adjust_dz=True):
-
-        if np.isnan(self.prop.k_z.get()).sum() > 0:
-            print('data corruption! reload propagator and simulation')
-            return
+            method='RK4', adjust_dz=True, dz_min=2e-7, err_max=1e-2,
+            growth_rate=None):
 
         # field in Fourier-Bessel space (updated by simulation)
         En_ts = self.prop.perform_transfer_TST(E0)
@@ -107,7 +113,7 @@ class Simulation:
 
             # adjust dz to the error
             if adjust_dz and err>0:
-                dz = self._opt_dz(dz, err)
+                dz = self._opt_dz( dz, err, dz_min, err_max, growth_rate )
             else:
                 dz = dz0
 
@@ -268,8 +274,8 @@ class Simulation:
         # update progress bar
         self.pbar.update(dz/self.Lz * 100)
         print("".join( 79 * [' '] ), end='\r', flush=True)
-        print(f'z = {(self.z_loc-self.z_0)*1e3:.3f} mm; dz = {dz*1e6:.3f} um',
-              end='\r', flush=True)
+        print(f'distance left = {(self.z_0+self.Lz-self.z_loc)*1e3:.3f} mm; '+
+              f'dz = {dz*1e6:.3f} um', end='\r', flush=True)
 
     def diags_to_numpy(self):
         for diag_str in self.diags.keys():
