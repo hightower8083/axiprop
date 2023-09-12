@@ -67,7 +67,6 @@ def refine1d_TR(A, refine_ord):
 
     return A_new
 
-@njit
 def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
     """
     from scipy.special import binom
