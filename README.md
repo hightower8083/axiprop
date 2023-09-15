@@ -14,7 +14,7 @@ field.
 sampling of radial axis [[K. Oubrerie, I.A. Andriyash et al, J. Opt. 24, 045503 (2022)](https://doi.org/10.1088/2040-8986/ac57d2)]
 - `PropagatorResamplingFresnel`: cylindical axisymmetric propagator based on the Fresnel approximation as given by `Eq. (4-17)` of [JW Goodman _Introduction to Fourier Optics_] and is suited for translations between far and near fields.
 - `PropagatorFFT2`: fully 3D FFT-based propagator
-- `PropagatorFFT2Fresnel`: ully 3D FFT-based propagator based on the Fresnel approximation 
+- `PropagatorFFT2Fresnel`: fully 3D FFT-based propagator based on the Fresnel approximation 
 
 ### Propagation with plasma models:
 - `Simulation` class includes a few algorithms (`'Euler'` `'Ralston'`, `'MP'`, `'RK4'`), method to provide adjustive steps, diagnostics
@@ -35,7 +35,7 @@ Computations can be done using a number of backends:
 
 Documentation is organized in a few sections:
 
- - [Equations of field propagation](./docs/main.md)
+ - [Equations of field propagation](https://github.com/hightower8083/axiprop/blob/new-docs/docs/main_equations.md)
 
 
 ## Installation
