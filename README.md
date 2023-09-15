@@ -35,8 +35,9 @@ Computations can be done using a number of backends:
 
 Documentation is organized in a few sections:
 
- - [Equations of field propagation](https://github.com/hightower8083/axiprop/blob/new-docs/docs/main_equations.md)
-
+ - [Main equations for optical field](https://github.com/hightower8083/axiprop/blob/new-docs/docs/main_equations.md)
+ - [Representation of optical field](https://github.com/hightower8083/axiprop/blob/new-docs/docs/field_representation.md)
+ - [Propagation of optical field](https://github.com/hightower8083/axiprop/blob/new-docs/docs/propagators_vacuum.md)
 
 ## Installation
 ### From PyPI
