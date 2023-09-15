@@ -18,7 +18,7 @@ sampling of radial axis [[K. Oubrerie, I.A. Andriyash et al, J. Opt. 24, 045503 
 
 ### Propagation with plasma models:
 - `Simulation` class includes a few algorithms (`'Euler'` `'Ralston'`, `'MP'`, `'RK4'`), method to provide adjustive steps, diagnostics
-- Plasma models: `PlasmaSimple` (linear current, $n_{pe}(z)$ ), `PlasmaSimpleNonuniform` (linear current, $n_{pe}(z, r)$), `PlasmaRelativistic` (non-linear current, $n_{pe}(z, r)$), `PlasmaIonization` (non-linear current and ionization, $n_{g}(z, r)$)
+- Plasma models: `PlasmaSimple` (linear current, $`n_{pe}(z)`$ ), `PlasmaSimpleNonuniform` (linear current, $`n_{pe}(z, r)`$), `PlasmaRelativistic` (non-linear current, $`n_{pe}(z, r)`$), `PlasmaIonization` (non-linear current and ionization, $`n_{g}(z, r)`$)
 
 ### Convenience tools include:
 - Container classes to create and handle time-frequency transformations for the **carrier-frequency-resolved** and **enveloped** fields.
