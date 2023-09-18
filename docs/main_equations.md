@@ -1,6 +1,34 @@
-## Basic model
+For optical propagation we need to describe evolution of electromagnetic field from the state defined at some time and space region to the state that it has after some time and in a different space region. Assuming all charges of the system to be free, the distribution and evolution of electromagnetic field in space and time is described by the Maxwell equations written for electric field and the magnetic induction vectors:
+```math
+\begin{aligned}
+ &\nabla \times \mathbf{B} = \frac{1}{c^2} \partial_t \mathbf{E} + \mu_0 \mathbf{J}\\
+ &\nabla \times \mathbf{E} = - \partial_t \mathbf{B}\,, \; \nabla E = \rho/\epsilon_0
+\end{aligned}
+```
 
-For optical propagation we need to describe evolution of electromagnetic field from the state defined at some time and space region to the state that it has after some time and in a different space region. This computation follows from the Maxwell equations for electric and magnetic fields:
+In most problems of the optical propagation of laser pulse, it is enough to describe evolution of its electric components and we can find the proper equation by combining the above ones:
+```math
+\begin{aligned}
+ & \nabla^2 \mathbf{E} = \frac{1}{c^2} \partial_t^2 \mathbf{E} + \mu_0  \partial_t\mathbf{J}  + \nabla \rho/\epsilon_0 
+\end{aligned}
+```
+
+The last term in the right hend side of this equation corresponds to the contribution of charge density perturbations (plasma waves), and may be neglected. Indeed, considering a single component of the laser field, e.g. `x`, and with the help of the continuity equation for the charge we may write the last two _source_ terms as:
+```math
+\begin{aligned}
+ & \mu_0  \partial_t J_x  + \partial_x \rho/\epsilon_0 =  \frac{1}{\epsilon_0 } \int_{-\infty}^{t} dt' (\frac{1}{c^2} \partial_t^2 J_x -  \partial_x^2 J_x )
+\end{aligned}
+```
+The terms under the integral in the Fourier space read, $`-\omega^2/c^2 J_x`$ and $`-k_x^2 J_x`$, and most optical problems for the directed pulse propagation $`\omega^2/c^2 \gg k_x^2`$ .
+
+
+In optical problems the state of the field is usually described 
+
+initial 
+
+With proper initial and boundary conditions and knowledge of cahrges motion thi
+
+ This computation follows from the Maxwell equations for electric and magnetic fields:
 
 $$ \nabla \times \mathbf{E} = - \partial_t \mathbf{B} $$
 
