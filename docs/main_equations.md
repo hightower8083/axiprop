@@ -1,25 +1,41 @@
-For optical propagation we need to describe evolution of electromagnetic field from the state defined at some time and space region to the state that it has after some time and in a different space region. Assuming all charges of the system to be free, the distribution and evolution of electromagnetic field in space and time is described by the Maxwell equations written for electric field and the magnetic induction vectors:
+In the optical propagation simulation we describe evolution of electromagnetic field from a state defined at some time and space region to another state that it takes after some time and in a different space region. This problem can be described by the Maxwell equations: 
 ```math
 \begin{aligned}
- &\nabla \times \mathbf{B} = \frac{1}{c^2} \partial_t \mathbf{E} + \mu_0 \mathbf{J}\\
- &\nabla \times \mathbf{E} = - \partial_t \mathbf{B}\,, \; \nabla E = \rho/\epsilon_0
+ &\nabla \times \mathbf{E} = - \partial_t \mathbf{B}\,,\\
+ &\nabla \times \mathbf{H} = \partial_t \mathbf{D} + \mathbf{J}\,,\\
+ & \nabla \mathbf{D} = \rho\,, \nabla  \mathbf{B} =0\,,\\
+ & \mathbf{D}  = \epsilon \mathbf{E} \,,\; \mathbf{B}  = \mu \mathbf{H} \,.
 \end{aligned}
 ```
 
-In most problems of the optical propagation of laser pulse, it is enough to describe evolution of its electric components and we can find the proper equation by combining the above ones:
+Assuming all charges of the system to be free, i.e. $`\epsilon=\epsilon_0`$ and $`\mu=\mu_0`$, we can write a pair of separate equations for the fields:
 ```math
 \begin{aligned}
- & \nabla^2 \mathbf{E} = \frac{1}{c^2} \partial_t^2 \mathbf{E} + \mu_0  \partial_t\mathbf{J}  + \nabla \rho/\epsilon_0 
+ & \nabla^2 \mathbf{E} - \frac{1}{c^2} \partial_t^2 \mathbf{E} = \mu_0  \partial_t\mathbf{J}  + \nabla \rho/\epsilon_0  \,, \\
+ & \nabla^2 \mathbf{H} - \frac{1}{c^2} \partial_t^2 \mathbf{H} =  - \nabla \times \mathbf{J}\,.
 \end{aligned}
 ```
 
-The last term in the right hend side of this equation corresponds to the contribution of charge density perturbations (plasma waves), and may be neglected. Indeed, considering a single component of the laser field, e.g. `x`, and with the help of the continuity equation for the charge we may write the last two _source_ terms as:
+The terms in the last term in the right hand sides of these equations are the _sources_, and they generate the field of response of the media via the current and density modulations. For most cases it is practical to consider the electric field as it drives the current and is used for the calculations: 
 ```math
 \begin{aligned}
- & \mu_0  \partial_t J_x  + \partial_x \rho/\epsilon_0 =  \frac{1}{\epsilon_0 } \int_{-\infty}^{t} dt' (\frac{1}{c^2} \partial_t^2 J_x -  \partial_x^2 J_x )
+ & \nabla^2 \mathbf{E} - \frac{1}{c^2} \partial_t^2 \mathbf{E} = \mu_0  \partial_t\mathbf{J}  \,.
 \end{aligned}
 ```
-The terms under the integral in the Fourier space read, $`-\omega^2/c^2 J_x`$ and $`-k_x^2 J_x`$, and most optical problems for the directed pulse propagation $`\omega^2/c^2 \gg k_x^2`$ .
+
+Note, that here we have dropped the last term $`\nabla \rho/\epsilon_0`$ as it is purely electrostatic ($`\nabla\times\nabla \rho \equiv 0`$), and it does not propagate with the electromagnetic field. 
+
+Physically, the contribution of this term can be estimated by re-writing the full source term as:
+```math
+\begin{aligned}
+ & \mu_0  \partial_t\mathbf{J}  + \nabla \rho/\epsilon_0  =  \frac{1}{\epsilon_0 } \int_{-\infty}^{t} dt' (\frac{1}{c^2} \partial_t^2 \mathbf{J} -   \nabla (\nabla \mathbf{J}) )\,,
+\end{aligned}
+```
+and comparing the terms under the intergral in the Fourier space, where we have them as $`\omega^2/c^2 \hat{\mathbf{J}}`$ and $`\mathbf{k}\cdot (\mathbf{k} \cdot \hat{\mathbf{J}})`$. Assuming the case of a linearly polarized laser field, we need to consider only one transverse current component (e.g. $`\mathbf{J} \parallel \mathbf{E} \parallel \mathbf{e}_x`$), which leads to the ratio between these terms $`k_x^2 c^2 / \omega^2`$. The optical field is typically contained in the spectral region, $`\omega\in [omega_0\pm \pi/\tau]`$ with $`k_x, k_y \in [\pm \pi/R]`$, where $`\omega_0`$, $`\tau`$ and $`R`$ are the central frequency, duration and the transverse size of the pulse or the field feature. 
+
+In most practical situations (*except for few-cycle and/or diffraction-limit focused pulses*) we have $`omega_0 w_0/c>>\pi`$ and it is safe to 
+
+
 
 
 In optical problems the state of the field is usually described 
