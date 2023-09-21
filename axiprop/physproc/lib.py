@@ -5,7 +5,7 @@ from ..lib import PropagatorSymmetric
 from .steppers import StepperNonParaxialPlasma
 from scipy.special import jn
 
-class PropagatorResamplingStepping(
+class PropagatorResamplingPlasma(
     PropagatorResampling, StepperNonParaxialPlasma):
     """
     A propagator with account for plasma response,

@@ -46,11 +46,13 @@ class StepperNonParaxialPlasma:
             Spectral-radial distribution of the field to be propagated.
         """
         if u_out is None:
-            u_out = self.bcknd.zeros( u.shape, self.dtype )
+            out_shape = (self.Nkz, *self.shape_trns)
+            u_out = self.bcknd.zeros( out_shape, self.dtype )
 
         for ikz in range(self.Nkz):
             self.u_loc = u[ikz,:].copy()
-            self.TST()
+            self.TST_stepping()
+            #self.TST()
             u_out[ikz] = self.u_ht.copy()
 
         return u_out
@@ -127,7 +129,8 @@ class StepperNonParaxialPlasma:
             If not provided will be allocated.
         """
         if u_out is None:
-            u_out = np.zeros( image.shape, dtype=self.dtype )
+            out_shape = (self.Nkz, *self.shape_trns_new)
+            u_out = np.zeros( out_shape, dtype=self.dtype )
 
         for ikz in range(self.Nkz):
             self.u_ht[:] = image[ikz]
@@ -136,7 +139,7 @@ class StepperNonParaxialPlasma:
 
         return u_out
 
-    def perform_transfer_TST(self, u):
+    def perform_transfer_TST(self, u, image=None, stepping=True):
         """
         Initiate the stepped propagation mode. This mode allows
         computation of the consequent steps with access to the result on
@@ -149,11 +152,16 @@ class StepperNonParaxialPlasma:
         """
         assert u.dtype == self.dtype
 
-        image = self.bcknd.zeros( u.shape, self.dtype )
+        if image is None:
+            out_shape = (self.Nkz, *self.shape_trns)
+            image = self.bcknd.zeros( out_shape, self.dtype )
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
-            self.TST()
+            if stepping:
+                self.TST_stepping()
+            else:
+                self.TST()
             image[ikz] = self.u_ht.copy()
 
         return image
@@ -174,8 +182,8 @@ class StepperNonParaxialPlasma:
             If not provided will be allocated.
         """
         if u_out is None:
-            u_out = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=self.dtype)
+            out_shape = (self.Nkz, *self.shape_trns_new)
+            u_out = np.empty(out_shape, dtype=self.dtype)
 
         for ikz in range(self.Nkz):
             if self.kz[ikz] <= 0:

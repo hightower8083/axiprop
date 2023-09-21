@@ -144,7 +144,7 @@ class ScalarFieldEnvelope:
 
         if Energy is not None and a0 is None:
             a0 = 1.0
-        else:
+        elif Energy is None and a0 is None:
             warn('Either `a0` of `Energy` must be specified.')
 
         if omega0 is None:
@@ -442,8 +442,9 @@ class ScalarField:
         dump_r = np.linspace(0, 1, n_dump)
         self.dump_mask = ( 1 - np.exp(-(2*dump_r)**3) )[::-1]
 
-    def make_gaussian_pulse( self, a0, tau, r, R_las, t0=0,
-                             phi0=0, n_ord=2, omega0=None ):
+    def make_gaussian_pulse( self, r_axis, tau, w0, a0=None,
+                            Energy=None, t0=0.0, phi0=0.0, n_ord=2,
+                            omega0=None, transform=True):
         """
         Initialize the Gaussian pulse
 
@@ -470,12 +471,17 @@ class ScalarField:
         omega0: float (s^-1)
             central frequency of the pulse
         """
-        self.r_shape = r.shape
+        self.r_shape = r_axis.shape
         t = self.t
-        self.r = r.copy()
+        self.r = r_axis.copy()
 
         if omega0 is None:
             omega0 = self.omega0
+
+        if Energy is not None and a0 is None:
+            a0 = 1.0
+        elif Energy is None and a0 is None:
+            warn('Either `a0` of `Energy` must be specified.')
 
         profile_r = np.exp( -( r/R_las )**n_ord )
         profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.sin(omega0 * t + phi0)
@@ -488,34 +494,22 @@ class ScalarField:
             self.k_freq_shaped = self.k_freq[:, None, None]
 
         self.E0 = a0 * m_e * c * omega0 / e
-        self.Field = self.E0 * profile_t * profile_r[None, :]
+        self.Field = ( self.E0 * profile_t * profile_r[None,:] ) \
+                        .astype(self.dtype)
 
         self.Field = apply_boundary_t(self.Field, self.dump_mask)
         self.Field = apply_boundary_r(self.Field, self.dump_mask)
 
-        self.Field_ft = np.zeros(
-            (self.Nk_freq, *self.r_shape), dtype=self.dtype_ft
-        )
-        self.time_to_frequency()
+        if Energy is not None:
+            self.Field *= ( Energy / self.Energy ) ** 0.5
+
+        if transform:
+            self.Field_ft = np.zeros(
+                (self.Nk_freq, *self.r_shape), dtype=self.dtype_ft
+            )
+            self.time_to_frequency()
 
         return self
-
-    @property
-    def Energy_ft(self):
-        """
-        Calculate total energy of the field from the spectral image
-        assuming it to correspond to the electric component, and all values
-        being defined in SI units.
-        """
-        if not hasattr(self, 'r'):
-            print('provide r-axis')
-            return None
-
-        Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
-            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
-        )
-
-        return Energy
 
     @property
     def Energy(self):
@@ -534,8 +528,25 @@ class ScalarField:
         )
         return Energy
 
+    @property
+    def Energy_ft(self):
+        """
+        Calculate total energy of the field from the spectral image
+        assuming it to correspond to the electric component, and all values
+        being defined in SI units.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
+        )
+
+        return Energy
+
     def import_field(self, Field, t_loc=None, r=None,
-                     transform=True):
+                     transform=True, make_copy=False):
         """
         Import the field from the temporal domain
 
@@ -565,16 +576,23 @@ class ScalarField:
         elif len(Field[0].shape)==2:
             self.k_freq_shaped = self.k_freq[:, None, None]
 
-        self.Field = Field
+        if make_copy:
+            self.Field = Field.copy()
+        else:
+            self.Field = Field
+
         self.r_shape = Field[0].shape
+
         if transform:
+            self.Field = apply_boundary_t(self.Field, self.dump_mask)
             self.Field = apply_boundary_r(self.Field, self.dump_mask)
             self.time_to_frequency()
-            self.Field_ft = apply_boundary_t(self.Field_ft, self.dump_mask)
 
         return self
 
-    def import_field_ft(self, Field, t_loc=None, r=None, transform=True):
+    def import_field_ft(self, Field, t_loc=None, r=None,
+                        transform=True, clean_boundaries=False,
+                        make_copy=False):
         """
         Import the field from the frequency domain
 
@@ -600,7 +618,11 @@ class ScalarField:
             self.r = r
 
         self.r_shape = Field[0].shape
-        self.Field_ft = Field.copy()
+
+        if make_copy:
+            self.Field_ft = Field.copy()
+        else:
+            self.Field_ft = Field
 
         if len(Field[0].shape)==1:
             self.k_freq_shaped = self.k_freq[:, None]
@@ -609,6 +631,10 @@ class ScalarField:
 
         if transform:
             self.frequency_to_time()
+            if clean_boundaries:
+                self.Field = apply_boundary_t(self.Field, self.dump_mask)
+                self.Field = apply_boundary_r(self.Field, self.dump_mask)
+                self.time_to_frequency()
 
         return self
 

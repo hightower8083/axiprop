@@ -80,7 +80,7 @@ class Simulation:
             growth_rate=None):
 
         # field in Fourier-Bessel space (updated by simulation)
-        En_ts = self.prop.perform_transfer_TST(E0)
+        En_ts = self.prop.perform_transfer_TST(E0, stepping=False)
         dz = dz0
 
         # lists to be filled numerical error data
