@@ -78,49 +78,39 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
 
     return J_plasma, n_e, T_e
 
+
 @jit(nopython=True, cache=True, parallel=True)
-def get_plasma_ADK_OFI(
-    E_laser, A_laser, t_axis, omega0, n_gas, pack_ADK, Uion,
-    Z_init=0, Zmax=-1, ionization_current=True ):
+def get_OFI_heating(
+    E_laser, P_laser, t_axis, omega0,
+    n_gas, pack_ADK,
+    Z_init=0, Zmax=-1 ):
 
     num_ions = pack_ADK[0].size + 1
     Nt, Nr = E_laser.shape
 
-    ion_fracts_loc = np.zeros(num_ions)
     Xi = np.zeros( (Nr, num_ions) )
-    J_plasma = np.zeros_like(E_laser)
     n_e = np.zeros(Nr)
     T_e = np.zeros(Nr)
 
     dt = t_axis[1] - t_axis[0]
     phase_env = np.exp(-1j * omega0 * t_axis)
-    phase_env_inv = np.exp(1j * omega0 * t_axis)
 
     for ir in prange(Nr):
 
+        ion_fracts_loc = np.zeros(num_ions)
         n_gas_ir = n_gas[ir]
 
         E_ir_t = E_laser[:,ir].copy()
-        A_ir_t = A_laser[:,ir].copy()
+        P_ir_t = P_laser[:,ir].copy()
 
         E_ir_t_re = np.real( E_ir_t * phase_env )
-        A_ir_t_re = np.real( A_ir_t * phase_env )
-
-        P_ir_env = np.abs( e * A_ir_t )
-        P_ir_re = e * A_ir_t_re
-        v_ir_re = P_ir_re / m_e / \
-            np.sqrt( 1 + 0.5 * P_ir_env**2 / (m_e*c)**2 )
-
-        J_ir_t_re = np.zeros_like(E_ir_t_re)
-
-        if Z_init>0:
-            J_ir_t_re += -e * Z_init * n_gas_ir * v_ir_re
+        P_ir_t_re = np.real( P_ir_t * phase_env )
 
         ion_fracts_loc[:] = 0.0
         ion_fracts_loc[Z_init] = 1.
 
-        electron_temp_dens = 0
-        all_new_events = 0
+        electron_temp_dens = 0.0
+        all_new_events = 0.0
 
         for it in range(Nt):
 
@@ -130,16 +120,9 @@ def get_plasma_ADK_OFI(
             probs = get_ADK_probability(
                 np.abs( E_ir_t_re[it] ), dt, *pack_ADK )
 
-            P0 = -P_ir_re[it]
-
             W_ir = m_e * c**2 * (
-                np.sqrt( 1 + P0**2 / (m_e*c)**2 ) - 1.0
+                np.sqrt( 1 + P_ir_t_re[it]**2 / (m_e*c)**2 ) - 1.0
             )
-
-            P_follow_re = P_ir_re[it:] + P0
-            P_follow_env = P_ir_env[it:]
-            v_follow = P_follow_re / m_e / \
-                np.sqrt( 1 + 0.5 * P_follow_env**2 / (m_e*c)**2 )
 
             for ion_state in range(num_ions-1):
                 new_events = ion_fracts_loc[ion_state] * probs[ion_state]
@@ -150,21 +133,12 @@ def get_plasma_ADK_OFI(
                     all_new_events += new_events
                     electron_temp_dens += W_ir * new_events
 
-                    if ionization_current:
-                        J_ir_t_re[it] += n_gas_ir * new_events \
-                            * Uion[ion_state] * e / E_ir_t_re[it] / dt
-
-                    J_ir_t_re[it:] += -e * new_events * n_gas_ir * v_follow
-
         if all_new_events>0:
-            T_e[ir] = electron_temp_dens/all_new_events
+            T_e[ir] = electron_temp_dens / all_new_events
         else:
             T_e[ir] = 0.0
 
-        n_e[ir] =  all_new_events * n_gas_ir
+        n_e[ir] = all_new_events * n_gas_ir
         Xi[ir, :] += ion_fracts_loc
 
-        J_ir_t = 2 * phase_env_inv * J_ir_t_re
-        J_plasma[:, ir] = J_ir_t.copy()
-
-    return J_plasma, n_e, T_e, Xi
+    return n_e, T_e, Xi

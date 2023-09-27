@@ -69,7 +69,7 @@ class Simulation:
             # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
         self.diags = {}
-        for diag_str in tuple(diag_fields) + ('z_axis', 'n_e', 'T_e'):
+        for diag_str in tuple(diag_fields) + ('z_axis',):
             self.diags[diag_str] = []
         self.refine_ord = refine_ord
 
@@ -78,6 +78,10 @@ class Simulation:
     def run(self, E0, Lz, dz0, N_diags, physprocs=[],
             method='RK4', adjust_dz=True, dz_min=2e-7, err_max=1e-2,
             growth_rate=None):
+
+        for diag_str in ['n_e', 'T_e', 'Xi']:
+            for i_physproc, physproc in enumerate(physprocs):
+                self.diags[ diag_str + str(i_physproc) ] = []
 
         # field in Fourier-Bessel space (updated by simulation)
         En_ts = self.prop.perform_transfer_TST(E0, stepping=False)
@@ -204,11 +208,20 @@ class Simulation:
         E_obj = ScalarFieldEnvelope(*self.EnvArgs).import_field_ft(
             E_ft, r=self.prop.r_new )
 
-        for physproc in physprocs:
+        for i_physproc, physproc in enumerate(physprocs):
+            i_physproc_str = str(i_physproc)
+
+            if hasattr(physproc, 'follow_process'):
+                physproc.get_data(E_obj)
+
             if hasattr(physproc, 'n_e'):
-                self.diags['n_e'].append(physproc.n_e)
+                self.diags['n_e'+i_physproc_str].append(physproc.n_e)
+
             if hasattr(physproc, 'T_e'):
-                self.diags['T_e'].append(physproc.T_e)
+                self.diags['T_e'+i_physproc_str].append(physproc.T_e)
+
+            if hasattr(physproc, 'Xi'):
+                self.diags['Xi'+i_physproc_str].append(physproc.Xi)
 
         if 'E_ft' in self.diags.keys():
             self.diags['E_ft'].append(E_obj.Field_ft)

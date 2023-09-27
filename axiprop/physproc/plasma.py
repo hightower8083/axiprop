@@ -8,12 +8,10 @@ from mendeleev import element as table_element
 from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d, refine1d_TR
 from .ionization_inline import get_plasma_ADK
-from .ionization_inline import get_plasma_ADK_OFI
+from .ionization_inline import get_OFI_heating
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
-
 mc_m2 = 1. / ( m_e * c )**2
-
 omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
@@ -198,25 +196,29 @@ class PlasmaIonization(PlasmaRelativistic):
 
         return Jp_ts
 
-class PlasmaIonizationOFI:
 
-    def __init__( self, n_gas, dens_func, my_element, refine_ord=1,
-                  Z_init=0, Zmax=-1, ionization_current=True):
+class OFI_heating:
+
+    def __init__( self, n_gas, dens_func, sim, my_element,
+                  Z_init=0, Zmax=-1, refine_ord=16):
+
+        self.follow_process = True
 
         self.n_gas = n_gas
         self.dens_func = dens_func
-        self.make_ADK(my_element)
+        self.sim = sim
         self.refine_ord = refine_ord
+
         self.Z_init = Z_init
         self.Zmax = Zmax
-        self.ionization_current = ionization_current
+        self.dt = sim.t_axis[1] - sim.t_axis[0]
+        self.make_ADK_OFI(my_element)
 
-    def make_ADK(self, my_element):
-        """
-        Prepare the useful data for ADK probabplity calculation for a given
-        element. This part is mostly a copy-pased from FBPIC code
-        [https://github.com/fbpic/fbpic]
-        """
+    def get_RHS(self, *args, **kw_args ):
+        return 0.0
+
+    def make_ADK_OFI(self, my_element):
+
         Uion = np.array(list(table_element(my_element).ionenergies.values()))
         Z_states = np.arange( Uion.size ) + 1
 
@@ -228,89 +230,31 @@ class PlasmaIonizationOFI:
 
         self.adk_power = - (2*n_eff - 1)
         self.adk_prefactor = omega_a * C2 * ( Uion/(2*UH) ) \
-                    * ( 2 * (Uion/UH)**(3./2) * Ea )**(2*n_eff - 1)
+            * ( 2 * (Uion/UH)**1.5 * Ea )**(2*n_eff - 1)
+
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
-        self.Uion = Uion
+        self.Uion = e * Uion # convert to Joules
 
-    def coef_RHS(self, sim, kp_base=0.0):
-        k_z2 = sim.prop.kz[:, None]**2 - sim.prop.kr[None,:]**2 - kp_base**2
-        cond = (k_z2>0.0)
-        k_z_inv = np.divide(
-            1., np.sqrt(k_z2, where=cond), where=cond)
-        k_z_inv *= cond
+    def get_data(self, E_obj):
 
-        omega = sim.prop.kz[:, None] * c
-        coef_RHS = sim.prop.bcknd.to_device(-0.5 * mu_0 * omega * k_z_inv)
+        sim = self.sim
+        prop = self.sim.prop
+        n_gas_loc = self.n_gas * self.dens_func( sim.z_loc, prop.r_new )
 
-        return coef_RHS
+        E_loc_t =  E_obj.Field.copy()
 
-    def get_RHS(self, sim, E_ts, dz=0.0 ):
-
-        r_axis = sim.prop.r_new
-        omega = sim.prop.kz[:, None] * c
-
-        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, r_axis )
-        self.kp_z0 = 0.0
-
-        if dz != 0.0:
-            sim.t_axis += dz / c
-            E_loc = sim.prop.step_and_iTST(E_ts, dz, kp=self.kp_z0)
-        else:
-            E_loc = sim.prop.perform_iTST(E_ts)
-
-        A_loc = -1j * np.divide(1, omega, where=(omega>0.0)) * E_loc
-        A_loc *= (omega>0.0)
-
-        E_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
-            E_loc).Field
-        A_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
-            A_loc).Field
-
-        dt = sim.t_axis[1] - sim.t_axis[0]
-
-        Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK_OFI(
-            E_loc_t, A_loc_t, sim.t_axis, sim.omega0, n_gas,
-            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.refine_ord,
-            self.ionization_current)
-
-        Jp_ft = ScalarFieldEnvelope(*sim.EnvArgs).import_field(
-            Jp_loc_t ).Field_ft
-
-        Jp_ts = sim.prop.perform_TST( Jp_ft )
-
-        if dz != 0.0:
-            sim.t_axis -= dz / c
-            Jp_ts = sim.prop.step_simple(Jp_ts, -dz, kp=self.kp_z0)
-
-        Jp_ts *= self.coef_RHS(sim, kp_base=self.kp_z0)
-
-        return Jp_ts
-
-    def get_plasma(self, sim, E_loc, z0 ):
-
-        r_axis = sim.prop.r_new
-        n_gas = self.n_gas * self.dens_func( z0, r_axis )
-        omega = sim.prop.kz[:, None] * c
-
-        A_loc = -1j * np.divide(1, omega, where=(omega>0.0)) * E_loc
-        A_loc *= (omega>0.0)
-
-        E_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
-            E_loc).Field
-        A_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
-            A_loc).Field
+        P_loc = -1j * e * E_obj.Field_ft * prop.omega_inv
+        P_loc_t =  ScalarFieldEnvelope(*sim.EnvArgs).import_field_ft(
+            P_loc).Field
 
         if self.refine_ord>1:
             E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)
-            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord)
-            t_axis = refine1d(sim.t_axis, self.refine_ord)
+            P_loc_t = refine1d_TR(P_loc_t, self.refine_ord)
+            t_axis  = refine1d(sim.t_axis, self.refine_ord)
         else:
             t_axis = sim.t_axis.copy()
 
-        Jp_loc_t, n_e, T_e, Xi = get_plasma_ADK_OFI(
-            E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
+        self.n_e, self.T_e, self.Xi = get_OFI_heating(
+            E_loc_t, P_loc_t, t_axis, sim.omega0, n_gas_loc,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current)
-
-        return Jp_loc_t, n_e, T_e, Xi
+            self.Z_init, self.Zmax)
