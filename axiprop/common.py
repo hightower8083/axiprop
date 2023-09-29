@@ -231,17 +231,21 @@ class CommonTools:
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                                  fill_value='extrapolate',
                                  kind='cubic',
+                                 assume_sorted=True,
                                  bounds_error=False )
 
         interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
                                   fill_value='extrapolate',
                                   kind='cubic',
+                                  assume_sorted=True,
                                   bounds_error=False )
 
         u_slice_abs = interp_fu_abs(r_new)
         u_slice_angl = interp_fu_angl(r_new)
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        u_slice_new *= (r_new <= r_loc.max() )
+
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
@@ -273,13 +277,6 @@ class PropagatorExtras:
     """
     Some experimental or obsolete stuff
     """
-    def apply_boundary(self, u, nr_boundary=16):
-        # apply the boundary "absorbtion"
-        absorb_layer_axis = np.r_[0 : np.pi/2 : nr_boundary*1j]
-        absorb_layer_shape = np.cos(absorb_layer_axis)**0.5
-        absorb_layer_shape[-1] = 0.0
-        u[:, -nr_boundary:] *= absorb_layer_shape
-        return u
 
     def get_Ez(self, ux):
         """

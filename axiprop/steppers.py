@@ -57,6 +57,9 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
             self.TST()
 
@@ -109,11 +112,76 @@ class StepperNonParaxial:
             pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc = self.bcknd.to_device(u[ikz].copy())
             self.TST()
             k_loc = self.bcknd.sqrt(self.bcknd.abs( self.kz[ikz]**2 - \
                                                      self.kr2 ))
             for i_step in range(Nsteps):
+                self.u_ht *= self.bcknd.exp(1j * dz[i_step] * k_loc )
+                self.iTST()
+                u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
+
+                if tqdm_available and show_progress:
+                    pbar.update(1)
+                elif show_progress and not tqdm_available:
+                    print(f"Done step {i_step} of {Nsteps} "+ \
+                          f"for wavelength {ikz+1} of {self.Nkz}",
+                          end='\r', flush=True)
+
+        if tqdm_available and show_progress:
+            pbar.close()
+
+        return u_steps
+
+    def steps_disp(self, u, z_axis, kp_axis=None, show_progress=True):
+        """
+        Propagate wave `u` over the multiple steps.
+
+        Parameters
+        ----------
+        u: 2darray of complex or double
+            Spectral-radial distribution of the field to propagate.
+
+        z_axis: array of floats (m)
+            Axis over which wave should be propagated. Overrides dz.
+
+        kp_axis: array of floats (1/m)
+            Plasma wavevectors along the propagation
+
+        Returns
+        -------
+        u: 3darray of complex or double
+            Array with the steps of the propagated field.
+        """
+        assert u.dtype == self.dtype
+        if z_axis is not None:
+            dz = np.r_[z_axis[0], np.diff(z_axis)]
+
+        Nsteps = len(dz)
+        if Nsteps==0:
+            return None
+
+        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+                         dtype=u.dtype)
+
+        if tqdm_available and show_progress:
+            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+
+        for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
+            self.u_loc = self.bcknd.to_device(u[ikz].copy())
+            self.TST()
+
+            for i_step in range(Nsteps):
+                k_loc = self.bcknd.sqrt(self.bcknd.abs(
+                    self.kz[ikz]**2 - self.kr2 - kp_axis[i_step]**2)
+                )
+
                 self.u_ht *= self.bcknd.exp(1j * dz[i_step] * k_loc )
                 self.iTST()
                 u_steps[i_step, ikz, :] = self.bcknd.to_host(self.u_iht)
@@ -250,7 +318,7 @@ class StepperFresnel:
     This class should to be used to derive the actual Propagators
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
-    def step(self, u, dz, overwrite=False, show_progress=False):
+    def step(self, u, dz, dz_min=None, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
 
@@ -275,12 +343,18 @@ class StepperFresnel:
         else:
             u_step = u
 
+        if dz_min is None:
+            dz_min = dz
+
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
 
-        self.check_new_grid(dz)
+        self.check_new_grid(dz_min)
 
         for ikz in range(self.Nkz):
+            if self.kz[ikz] <= 0:
+                continue
+
             self.u_loc[:] = self.bcknd.to_device(u[ikz,:].copy())
             self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
             self.TST()
@@ -331,7 +405,7 @@ class StepperFresnel:
             pbar = tqdm(total=Nsteps, bar_format=bar_format)
 
         for i_step, z_dest in enumerate(z_axis):
-            u_steps[i_step] = self.step(u, z_dest)
+            u_steps[i_step] = self.step(u, z_dest, dz_min=z_axis.min())
             if tqdm_available and show_progress:
                 pbar.update(1)
 
