@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 from axiprop.containers import ScalarFieldEnvelope
 
