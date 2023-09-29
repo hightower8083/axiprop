@@ -5,7 +5,7 @@ from ..lib import PropagatorSymmetric
 from .steppers import StepperNonParaxialPlasma
 from scipy.special import jn
 
-class PropagatorResamplingPlasma(
+class PropagatorResamplingStepping(
     PropagatorResampling, StepperNonParaxialPlasma):
     """
     A propagator with account for plasma response,
@@ -40,7 +40,7 @@ class PropagatorResamplingPlasma(
         self.u_ht = self.TST_resampled_matmul(
             self.TM_resampled, self.u_loc, self.u_ht)
 
-class PropagatorSymmetricPlasma(
+class PropagatorSymmetricStepping(
     PropagatorSymmetric, StepperNonParaxialPlasma):
     """
     A propagator with account for plasma response,

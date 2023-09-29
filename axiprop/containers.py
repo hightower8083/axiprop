@@ -238,7 +238,7 @@ class ScalarFieldEnvelope:
             self.t_loc = t_loc
 
         if r is not None:
-            self.r = r
+            self.r = r.copy()
 
         if len(Field[0].shape)==1:
             self.k_freq_base_shaped = self.k_freq_base[:, None]
@@ -284,7 +284,7 @@ class ScalarFieldEnvelope:
             self.t_loc = t_loc
 
         if r is not None:
-            self.r = r
+            self.r = r.copy()
 
         self.r_shape = Field[0].shape
 
@@ -450,14 +450,20 @@ class ScalarField:
 
         Parameters
         ----------
-        a0: float
-          Normalized amplitude of the pulse
+        r_axis: float ndarray (m)
+            Radial grid for the container
 
         tau: float (s)
             Duration of the pulse (FBPIC definition)
 
-        r: float ndarray (m)
-            Radial grid for the container
+        w0: float (m)
+            Waist of the pulse (FBPIC definition)
+
+        a0: float
+          Normalized amplitude of the pulse
+
+        Energy: float (J)
+          Energy of the pulse in Joules
 
         t0: float (s)
             Time corresponding the peak field
@@ -483,7 +489,7 @@ class ScalarField:
         elif Energy is None and a0 is None:
             warn('Either `a0` of `Energy` must be specified.')
 
-        profile_r = np.exp( -( r/R_las )**n_ord )
+        profile_r = np.exp( -( r_axis / w0 )**n_ord )
         profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.sin(omega0 * t + phi0)
 
         if len(profile_r.shape) == 1:
@@ -569,7 +575,7 @@ class ScalarField:
             self.t_loc = t_loc
 
         if r is not None:
-            self.r = r
+            self.r = r.copy()
 
         if len(Field[0].shape)==1:
             self.k_freq_shaped = self.k_freq[:, None]
@@ -615,7 +621,7 @@ class ScalarField:
             self.t_loc = t_loc
 
         if r is not None:
-            self.r = r
+            self.r = r.copy()
 
         self.r_shape = Field[0].shape
 

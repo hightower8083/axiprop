@@ -264,7 +264,7 @@ try:
         inv_sqr_on_host = inv_sqr_on_host
 
         def divide_abs_or_set_to_one(self, ar1, ar2):
-            return ( self.af.where(a2>0, ar1/ar2, 1.0) )
+            return ( self.af.where(ar2>0, ar1/ar2, 1.0) )
 
         def to_host(self, arr_in):
             arr_out = arr_in.to_ndarray()
