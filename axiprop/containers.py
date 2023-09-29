@@ -71,11 +71,8 @@ class ScalarFieldEnvelope:
         k0: float (m^-1)
           Central wavenumber for the spectral grid
 
-        t_range: tuple of floats (t0, t1) (s)
-            Range of the initial temporal domain
-
-        dt: float (s)
-            Time-step to resolve the temporal domain
+        t_axis: 1d ndarray (s)
+            Temporal grid of the initial temporal domain
 
         n_dump: int
             Number of cells to be used for attenuating boundaries
@@ -490,7 +487,7 @@ class ScalarField:
     A class to initialize and transform the optical field between temporal
     and frequency domains.
     """
-    def __init__(self, k0, bandwidth, t_range, dt, n_dump=0,
+    def __init__(self, k0, t_axis, bandwidth, n_dump=0,
                  dtype_ft=np.complex128, dtype=np.double ):
         """
         Initialize the container for the field.
@@ -500,14 +497,11 @@ class ScalarField:
         k0: float (m^-1)
           Central wavenumber for the spectral grid
 
+        t_axis: 1d ndarray (s)
+            Temporal grid of the initial temporal domain
+
         bandwidth: float (m^-1)
             Width of the spectral grid
-
-        t_range: tuple of floats (t0, t1) (s)
-            Range of the initial temporal domain
-
-        dt: float (s)
-            Time-step to resolve the temporal domain
 
         n_dump: int
             Number of cells to be used for attenuating boundaries
@@ -516,21 +510,26 @@ class ScalarField:
         self.dtype_ft = dtype_ft
         self.k0 = k0
         self.omega0 = k0 * c
-        self.t_range = t_range
-        self.dt = dt
-        self.cdt = c * dt
 
-        self.t = np.arange(*t_range, dt)
-        if np.mod(self.t.size, 2) == 1:
-            self.t = self.t[:-1]
+        self.t = t_axis.copy()
+        self.dt = t_axis[[0,1]].ptp()
+        self.cdt = c * self.dt
+
         self.Nt = self.t.size
         self.t_loc = self.t[0]
 
-        self.k_freq_full = 2 * np.pi * np.fft.rfftfreq( self.Nt, c*dt )
+        self.k_freq_full = 2 * np.pi * np.fft.rfftfreq( self.Nt, c*self.dt )
         self.Nk_freq_full = self.k_freq_full.size
         self.k_freq_full = self.k_freq_full[:self.Nk_freq_full]
 
-        self.band_mask = ( np.abs(self.k_freq_full - k0) < bandwidth )
+        if type(bandwidth) in [tuple, list]:
+            lambda_min, lambda_max = bandwidth
+            k_max = 2 * np.pi / lambda_min
+            k_min = 2 * np.pi / lambda_max
+            self.band_mask = (self.k_freq_full>k_min) * (self.k_freq_full<k_max)
+        else:
+            self.band_mask = ( np.abs(self.k_freq_full - k0) < bandwidth )
+
         self.k_freq = self.k_freq_full[self.band_mask]
         self.Nk_freq = self.k_freq.size
         self.omega = self.k_freq * c
@@ -574,9 +573,20 @@ class ScalarField:
         omega0: float (s^-1)
             central frequency of the pulse
         """
-        self.r_shape = r_axis.shape
         t = self.t
-        self.r = r_axis.copy()
+
+        if type(r_axis) is tuple and len(r_axis)==3:
+            self.r = r_axis[0].copy()
+            self.x = r_axis[1].copy()
+            self.y = r_axis[2].copy()
+        elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+            self.r = r_axis.copy()
+        else:
+            warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                 "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+            )
+
+        self.r_shape = self.r.shape
 
         if omega0 is None:
             omega0 = self.omega0
@@ -586,7 +596,7 @@ class ScalarField:
         elif Energy is None and a0 is None:
             warn('Either `a0` of `Energy` must be specified.')
 
-        profile_r = np.exp( -( r_axis / w0 )**n_ord )
+        profile_r = np.exp( -( self.r / w0 )**n_ord )
         profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.sin(omega0 * t + phi0)
 
         if len(profile_r.shape) == 1:
@@ -626,9 +636,18 @@ class ScalarField:
             print('provide r-axis')
             return None
 
-        Energy = 2 * np.pi * epsilon_0 * trapezoid(
-            trapezoid(self.Field**2 * self.r, self.r), c * self.t
-        )
+        if len(self.Field[0].shape)==1:
+            Energy = 2 * np.pi * epsilon_0 * trapezoid(
+                trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
+            )
+        else:
+            dx = self.x[[0,1]].ptp()
+            dy = self.x[[0,1]].ptp()
+            cdt = c * self.t[[0,1]].ptp()
+            Energy = 2 * np.pi * epsilon_0 * \
+                np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
+
+
         return Energy
 
     @property
@@ -642,13 +661,78 @@ class ScalarField:
             print('provide r-axis')
             return None
 
-        Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
-            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
-        )
+        if len(self.Field_ft[0].shape)==1:
+            Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+                ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
+            )
+        else:
+            dx = self.x[[0,1]].ptp()
+            dy = self.x[[0,1]].ptp()
+
+            Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * \
+                ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
+
 
         return Energy
 
-    def import_field(self, Field, t_loc=None, r=None,
+    @property
+    def w0(self):
+        """
+        Calculate waist the field from the temporal distribution.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        if len(self.Field[0].shape)==1:
+            spot_r = (np.abs(self.Field)**2).sum(0)
+            w0 = 2 * np.sqrt(np.average(self.r**2, weights=spot_r))
+        else:
+            I_norm = np.abs(self.Field)**2
+            spot_x = I_norm.sum(0).sum(-1)
+            spot_y = I_norm.sum(0).sum(1)
+            w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
+                                - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
+                                - np.average(self.x, weights=spot_x)**2)
+            w0 = (w0_x, w0_y)
+
+        return w0
+
+    @property
+    def w0_ft(self):
+        """
+        Calculate waist the field from the temporal distribution.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        if len(self.Field_ft[0].shape)==1:
+            spot_r = (np.abs(self.Field_ft)**2).sum(0)
+            w0 = 2 * np.sqrt(np.average(self.r**2, weights=spot_r))
+        else:
+            I_norm = np.abs(self.Field_ft)**2
+            spot_x = I_norm.sum(0).sum(-1)
+            spot_y = I_norm.sum(0).sum(1)
+            w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
+                                - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
+                                - np.average(self.x, weights=spot_x)**2)
+            w0 = (w0_x, w0_y)
+
+        return w0
+
+    @property
+    def tau(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        tau = 2**.5 * np.sqrt(
+            np.average(self.t**2, weights=fld_onax) \
+            - np.average(self.t, weights=fld_onax)**2
+        )
+        return tau
+
+    def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
         """
         Import the field from the temporal domain
@@ -662,7 +746,7 @@ class ScalarField:
         t_loc: float (s)
             Local time for the field to be considered in frequency space
 
-        r: float ndarray (m)
+        r_axis: float ndarray (m)
             Radial grid for the container
 
         transform: bool
@@ -671,8 +755,16 @@ class ScalarField:
         if t_loc is not None:
             self.t_loc = t_loc
 
-        if r is not None:
-            self.r = r.copy()
+        if type(r_axis) is tuple and len(r_axis)==3:
+            self.r = r_axis[0].copy()
+            self.x = r_axis[1].copy()
+            self.y = r_axis[2].copy()
+        elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+            self.r = r_axis.copy()
+        else:
+            warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                 "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+            )
 
         if len(Field[0].shape)==1:
             self.k_freq_shaped = self.k_freq[:, None]
@@ -693,7 +785,7 @@ class ScalarField:
 
         return self
 
-    def import_field_ft(self, Field, t_loc=None, r=None,
+    def import_field_ft(self, Field, t_loc=None, r_axis=None,
                         transform=True, clean_boundaries=False,
                         make_copy=False):
         """
@@ -708,7 +800,7 @@ class ScalarField:
         t_loc: float (s)
             Local time for the field to be considered in frequency space
 
-        r: float ndarray (m)
+        r_axis: float ndarray (m)
             Radial grid for the container
 
         transform: bool
@@ -717,8 +809,16 @@ class ScalarField:
         if t_loc is not None:
             self.t_loc = t_loc
 
-        if r is not None:
-            self.r = r.copy()
+        if type(r_axis) is tuple and len(r_axis)==3:
+            self.r = r_axis[0].copy()
+            self.x = r_axis[1].copy()
+            self.y = r_axis[2].copy()
+        elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+            self.r = r_axis.copy()
+        else:
+            warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                 "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+            )
 
         self.r_shape = Field[0].shape
 
@@ -810,12 +910,12 @@ class ScalarField:
                 iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, ix, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
-            elif ix == ":":
+            elif ix is ":":
                 if iy is None:
                     iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, :, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
-            elif iy == ":":
+            elif iy is ":":
                 if ix is None:
                     ix = Nx // 2 - 1
                 Field_ft = self.Field_ft[:, ix, :].copy()

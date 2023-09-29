@@ -1,12 +1,12 @@
 import numpy as np
-from axiprop.containers import ScalarFieldEnvelope
+from axiprop.containers import ScalarField as Container
 
 LaserEnergy = 1.0
 w0 = 10.e-6
 tau = 30e-15
 lambda0 = 0.8e-6
 
-Nt = 128
+Nt = 1024
 k0 = 2 * np.pi / lambda0
 t_axis = np.linspace( -3.5 * tau, 3.5 * tau, Nt )
 
@@ -14,7 +14,7 @@ def gaussian_rt():
     Nr = 512
     r_axis = np.linspace( 0.0, 3.5*w0, Nr )
 
-    container = ScalarFieldEnvelope(k0, t_axis)
+    container = Container(k0, t_axis, 16/tau)
     LaserObject = container.make_gaussian_pulse(
             r_axis, tau, w0, Energy=LaserEnergy, n_ord=2
     )
@@ -26,7 +26,7 @@ def gaussian_xyt():
     y = np.linspace( -3.5*w0, 3.5*w0, Nx )
     r = np.sqrt( x[:,None]**2 + y[None,:]**2 )
 
-    container = ScalarFieldEnvelope(k0, t_axis)
+    container = Container(k0, t_axis, 16/tau)
     LaserObject = container.make_gaussian_pulse(
             (r, x, y), tau, w0, Energy=LaserEnergy, n_ord=2
     )
@@ -52,7 +52,7 @@ def check_waist_xyt(LaserObject):
     assert np.allclose(w0_est_ft[1], w0, rtol=1e-7)
 
 def check_imports(LaserObject, r_axis, check_waist):
-    container = ScalarFieldEnvelope(k0, t_axis)
+    container = Container(k0, t_axis, 16/tau)
     LaserObject = container.import_field(
         LaserObject.Field, r_axis=r_axis, make_copy=True
     )
@@ -60,7 +60,7 @@ def check_imports(LaserObject, r_axis, check_waist):
     check_waist(LaserObject)
     check_tau(LaserObject)
 
-    container = ScalarFieldEnvelope(k0, t_axis)
+    container = Container(k0, t_axis, 16/tau)
     LaserObject = container.import_field_ft(
         LaserObject.Field_ft, r_axis=r_axis, make_copy=True
     )
