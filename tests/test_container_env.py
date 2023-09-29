@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-from copy import deepcopy
 from axiprop.containers import ScalarFieldEnvelope
 
 LaserEnergy = 1.0
@@ -13,12 +12,10 @@ k0 = 2 * np.pi / lambda0
 t_axis = np.linspace( -3.5 * tau, 3.5 * tau, Nt )
 
 def gaussian_rt():
-    container = ScalarFieldEnvelope(k0, t_axis)
     Nr = 512
     r_axis = np.linspace( 0.0, 3.5*w0, Nr )
 
-    container_sup = deepcopy(container)
-
+    container = ScalarFieldEnvelope(k0, t_axis)
     LaserObject = container.make_gaussian_pulse(
             r_axis, tau, w0, Energy=LaserEnergy, n_ord=2
     )
@@ -74,9 +71,9 @@ def test_all():
     lasers = [ laser_rt, laser_xyt]
     check_waist_methods = [check_waist_rt, check_waist_xyt]
     r_axes = [laser_rt.r, (laser_xyt.r, laser_xyt.x, laser_xyt.y)]
-    test_sequence = zip(lasers, check_waist_methods, r_axes)
+    geometries = zip(lasers, check_waist_methods, r_axes)
 
-    for LaserObject, check_waist, r_axis in test_sequence:
+    for LaserObject, check_waist, r_axis in geometries:
         check_energy(LaserObject)
         check_waist(LaserObject)
         check_imports(LaserObject, r_axis, check_waist)
