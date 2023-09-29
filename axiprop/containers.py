@@ -138,9 +138,20 @@ class ScalarFieldEnvelope:
         transform: bool (optional)
             Wether to transform the field to the frequency domain
         """
-        self.r_shape = r_axis.shape
         t = self.t
-        self.r = r_axis.copy()
+
+        if type(r_axis) is tuple and len(r_axis)==3:
+            self.r = r_axis[0].copy()
+            self.x = r_axis[1].copy()
+            self.y = r_axis[2].copy()
+        elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+            self.r = r_axis.copy()
+        else:
+            warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                 "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+            )
+
+        self.r_shape = self.r.shape
 
         if Energy is not None and a0 is None:
             a0 = 1.0
@@ -150,7 +161,7 @@ class ScalarFieldEnvelope:
         if omega0 is None:
             omega0 = self.omega0
 
-        profile_r = np.exp( -( r_axis/w0 )**n_ord )
+        profile_r = np.exp( -( self.r/w0 )**n_ord )
         profile_t = np.exp( -(t-t0)**2 / tau**2 ) * np.exp( 1j * phi0 )
 
         if len(profile_r.shape) == 1:
@@ -192,9 +203,17 @@ class ScalarFieldEnvelope:
             print('provide r-axis')
             return None
 
-        Energy = np.pi * epsilon_0 * trapezoid(
-            trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
-        )
+        if len(self.Field[0].shape)==1:
+            Energy = np.pi * epsilon_0 * trapezoid(
+                trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
+            )
+        else:
+            dx = self.x[[0,1]].ptp()
+            dy = self.x[[0,1]].ptp()
+            cdt = c * self.t[[0,1]].ptp()
+            Energy = np.pi * epsilon_0 * \
+                np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
+
         return Energy
 
     @property
@@ -208,13 +227,64 @@ class ScalarFieldEnvelope:
             print('provide r-axis')
             return None
 
-        Energy = np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
-            ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
-        )
+        if len(self.Field_ft[0].shape)==1:
+            Energy = np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+                ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
+            )
+        else:
+            dx = self.x[[0,1]].ptp()
+            dy = self.x[[0,1]].ptp()
+
+            Energy = np.pi * epsilon_0 * c * self.t.ptp() * \
+                ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
 
         return Energy
 
-    def import_field(self, Field, t_loc=None, r=None,
+    @property
+    def w0(self):
+        """
+        Calculate waist the field from the temporal distribution.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        if len(self.Field[0].shape)==1:
+            spot_r = np.abs(self.Field**2).sum(0)
+            w0 = 2 * np.sqrt(np.average(self.r**2, weights=spot_r))
+        else:
+            I_norm = np.abs(self.Field**2)
+            spot_x = I_norm.sum(0).sum(-1)
+            spot_y = I_norm.sum(0).sum(1)
+            w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0 = (w0_x, w0_y)
+
+        return w0
+
+    @property
+    def w0_ft(self):
+        """
+        Calculate waist the field from the temporal distribution.
+        """
+        if not hasattr(self, 'r'):
+            print('provide r-axis')
+            return None
+
+        if len(self.Field_ft[0].shape)==1:
+            spot_r = np.abs(self.Field_ft**2).sum(0)
+            w0 = 2 * np.sqrt(np.average(self.r**2, weights=spot_r))
+        else:
+            I_norm = np.abs(self.Field_ft**2)
+            spot_x = I_norm.sum(0).sum(-1)
+            spot_y = I_norm.sum(0).sum(1)
+            w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0 = (w0_x, w0_y)
+
+        return w0
+
+    def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
         """
         Import the field from the temporal domain
@@ -228,7 +298,7 @@ class ScalarFieldEnvelope:
         t_loc: float (s)
             Local time for the field to be considered in frequency space
 
-        r: float ndarray (m)
+        r_axis: float ndarray (m)
             Radial grid for the container
 
         transform: bool
@@ -237,8 +307,17 @@ class ScalarFieldEnvelope:
         if t_loc is not None:
             self.t_loc = t_loc
 
-        if r is not None:
-            self.r = r.copy()
+        if r_axis is not None:
+            if type(r_axis) is tuple and len(r_axis)==3:
+                self.r = r_axis[0].copy()
+                self.x = r_axis[1].copy()
+                self.y = r_axis[2].copy()
+            elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+                self.r = r_axis.copy()
+            else:
+                warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                     "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+                )
 
         if len(Field[0].shape)==1:
             self.k_freq_base_shaped = self.k_freq_base[:, None]
@@ -259,7 +338,7 @@ class ScalarFieldEnvelope:
 
         return self
 
-    def import_field_ft(self, Field, t_loc=None, r=None,
+    def import_field_ft(self, Field, t_loc=None, r_axis=None,
                         transform=True, clean_boundaries=False,
                         make_copy=False):
         """
@@ -274,7 +353,7 @@ class ScalarFieldEnvelope:
         t_loc: float (s)
             Local time for the field to be considered in frequency space
 
-        r: float ndarray (m)
+        r_axis: float ndarray (m)
             Radial grid for the container
 
         transform: bool
@@ -283,8 +362,17 @@ class ScalarFieldEnvelope:
         if t_loc is not None:
             self.t_loc = t_loc
 
-        if r is not None:
-            self.r = r.copy()
+        if r_axis is not None:
+            if type(r_axis) is tuple and len(r_axis)==3:
+                self.r = r_axis[0].copy()
+                self.x = r_axis[1].copy()
+                self.y = r_axis[2].copy()
+            elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+                self.r = r_axis.copy()
+            else:
+                warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                     "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+                )
 
         self.r_shape = Field[0].shape
 
