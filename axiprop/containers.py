@@ -284,6 +284,15 @@ class ScalarFieldEnvelope:
 
         return w0
 
+    @property
+    def tau(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        tau = 2**.5 * np.sqrt(
+            np.average(self.t**2, weights=fld_onax) \
+            - np.average(self.t, weights=fld_onax)**2
+        )
+        return tau
+
     def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
         """
