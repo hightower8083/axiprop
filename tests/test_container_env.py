@@ -52,42 +52,31 @@ def check_waist_xyt(LaserObject):
     assert np.allclose(w0_est_ft[0], w0, rtol=1e-7)
     assert np.allclose(w0_est_ft[1], w0, rtol=1e-7)
 
-def test_make_gaussian_rz():
-    LaserObject = gaussian_rt()
-    check_energy(LaserObject)
-    check_waist_rt(LaserObject)
-
+def check_imports(LaserObject, r_axis, check_waist):
     container = ScalarFieldEnvelope(k0, t_axis)
     LaserObject = container.import_field(
-        LaserObject.Field, r_axis=LaserObject.r, make_copy=True
+        LaserObject.Field, r_axis=r_axis, make_copy=True
     )
     check_energy(LaserObject)
-    check_waist_rt(LaserObject)
+    check_waist(LaserObject)
 
     container = ScalarFieldEnvelope(k0, t_axis)
     LaserObject = container.import_field_ft(
-        LaserObject.Field_ft, r_axis=LaserObject.r, make_copy=True
+        LaserObject.Field_ft, r_axis=r_axis, make_copy=True
     )
     check_energy(LaserObject)
-    check_waist_rt(LaserObject)
+    check_waist(LaserObject)
 
-def test_make_gaussian_xyz():
-    LaserObject = gaussian_xyt()
-    check_energy(LaserObject)
-    check_waist_xyt(LaserObject)
+def test_all():
+    laser_rt = gaussian_rt()
+    laser_xyt = gaussian_xyt()
 
-    container = ScalarFieldEnvelope(k0, t_axis)
-    LaserObject = container.import_field(
-        LaserObject.Field, make_copy=True,
-        r_axis=(LaserObject.r, LaserObject.x, LaserObject.y),
-    )
-    check_energy(LaserObject)
-    check_waist_xyt(LaserObject)
+    lasers = [ laser_rt, laser_xyt]
+    check_waist_methods = [check_waist_rt, check_waist_xyt]
+    r_axes = [laser_rt.r, (laser_xyt.r, laser_xyt.x, laser_xyt.y)]
+    test_sequence = zip(lasers, check_waist_methods, r_axes)
 
-    container = ScalarFieldEnvelope(k0, t_axis)
-    LaserObject = container.import_field_ft(
-        LaserObject.Field_ft, make_copy=True,
-        r_axis=(LaserObject.r, LaserObject.x, LaserObject.y),
-    )
-    check_energy(LaserObject)
-    check_waist_xyt(LaserObject)
+    for LaserObject, check_waist, r_axis in test_sequence:
+        check_energy(LaserObject)
+        check_waist(LaserObject)
+        check_imports(LaserObject, r_axis, check_waist)
