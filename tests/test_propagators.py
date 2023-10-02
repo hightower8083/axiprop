@@ -64,17 +64,6 @@ def gaussian_rt(container, r_axis):
     )
     return LaserObject
 
-def gaussian_xyt(container):
-    Nx = 256
-    x = np.linspace( -3.5*w0, 3.5*w0, Nx )
-    y = np.linspace( -3.5*w0, 3.5*w0, Nx )
-    r = np.sqrt( x[:,None]**2 + y[None,:]**2 )
-
-    LaserObject = container.make_gaussian_pulse(
-            (r, x, y), tau, w0, Energy=LaserEnergy, n_ord=2
-    )
-    return LaserObject
-
 def check_energy(LaserObject):
     assert np.allclose(LaserObject.Energy, LaserEnergy, rtol=1e-7, atol=0)
     assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=1e-2, atol=0)

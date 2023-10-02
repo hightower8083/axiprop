@@ -250,8 +250,9 @@ class CommonTools:
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
-        if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
-            return u_loc
+        if x_loc.size==x_new.size and y_loc.size==y_new.size:
+            if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
+                return u_loc
 
         if not unwrap_available:
             raise NotImplementedError("install unwrap")
