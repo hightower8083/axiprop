@@ -24,5 +24,6 @@ jobs:
     - name: Test with pytest
       run: |
         pip install numpy scipy
+        pip install .
         pip install pytest
         pytest
