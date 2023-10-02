@@ -1,7 +1,6 @@
 import numpy as np
 from numba import jit, prange
-from scipy.constants import e, m_e, c, pi, mu_0
-from scipy.constants import epsilon_0, fine_structure
+from scipy.constants import e, m_e, c
 
 @jit(nopython=True, cache=True)
 def get_ADK_probability(E_fld, dt, adk_power, \

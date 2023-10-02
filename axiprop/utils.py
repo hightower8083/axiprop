@@ -7,7 +7,7 @@ Axiprop utils file
 This file contains utility methods for Axiprop tool
 """
 import numpy as np
-from scipy.constants import c, e, m_e
+from scipy.constants import c
 from scipy.interpolate import interp1d
 
 from axiprop.containers import ScalarFieldEnvelope
@@ -137,7 +137,6 @@ def get_temporal_1d(u, u_t, t, kz):
     """
     Resonstruct temporal field distribution
     """
-    Nkz = u.shape
     Nt = t.size
 
     for it in prange(Nt):
@@ -151,7 +150,7 @@ def get_temporal_radial(u, u_t, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nr = u.shape
+    Nr = u.shape[1]
     Nt = t.size
 
     assert u_t.shape[-1] == Nr
@@ -168,7 +167,7 @@ def get_temporal_slice2d(u, u_t, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nx, Ny = u.shape
+    _, Nx, Ny = u.shape
     Nt = t.size
 
     assert u_t.shape[-1] == Nx
@@ -185,7 +184,7 @@ def get_temporal_3d(u, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nx, Ny = u.shape
+    _, Nx, Ny = u.shape
     Nt = t.size
 
     u_t = np.empty((Nt, Nx, Ny))
@@ -203,7 +202,7 @@ def export_from_lasy(laser):
     omega0 = laser.profile.omega0
     t_axis = laser.grid.axes[time_axis_indx]
 
-    if dim == "rt":
+    if laser.dim == "rt":
         Container = []
         for i_m in range( laser.grid.azimuthal_modes.size ):
             Container.append(
@@ -213,7 +212,7 @@ def export_from_lasy(laser):
             )
     else:
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-            np.transpose(grid.field).copy()
+            np.transpose(laser.grid.field).copy()
         )
 
     return Container

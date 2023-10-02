@@ -254,7 +254,7 @@ class ScalarFieldEnvelope:
             spot_x = I_norm.sum(0).sum(-1)
             spot_y = I_norm.sum(0).sum(1)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
-            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
 
         return w0
@@ -276,7 +276,7 @@ class ScalarFieldEnvelope:
             spot_x = I_norm.sum(0).sum(-1)
             spot_y = I_norm.sum(0).sum(1)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
-            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
 
         return w0
@@ -693,8 +693,8 @@ class ScalarField:
             spot_y = I_norm.sum(0).sum(1)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
                                 - np.average(self.x, weights=spot_x)**2)
-            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
-                                - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) \
+                                - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
 
         return w0
@@ -717,8 +717,8 @@ class ScalarField:
             spot_y = I_norm.sum(0).sum(1)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
                                 - np.average(self.x, weights=spot_x)**2)
-            w0_y = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
-                                - np.average(self.x, weights=spot_x)**2)
+            w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) \
+                                - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
 
         return w0
@@ -910,12 +910,12 @@ class ScalarField:
                 iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, ix, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq * c * self.t_loc)
-            elif ix is ":":
+            elif ix == ":":
                 if iy is None:
                     iy = Ny // 2 - 1
                 Field_ft = self.Field_ft[:, :, iy].copy()
                 Field_ft *= np.exp(-1j * self.k_freq[:, None] * c * self.t_loc)
-            elif iy is ":":
+            elif iy == ":":
                 if ix is None:
                     ix = Nx // 2 - 1
                 Field_ft = self.Field_ft[:, ix, :].copy()

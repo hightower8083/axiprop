@@ -1,9 +1,8 @@
-import numpy as np
+from scipy.special import jn
 
 from ..lib import PropagatorResampling
 from ..lib import PropagatorSymmetric
 from .steppers import StepperNonParaxialPlasma
-from scipy.special import jn
 
 class PropagatorResamplingStepping(
     PropagatorResampling, StepperNonParaxialPlasma):
@@ -16,9 +15,6 @@ class PropagatorResamplingStepping(
         """
         Setup DHT transform
         """
-        Nr = self.Nr
-        Nr_new = self.Nr_new
-        r = self.r
         r_new = self.r_new
         kr = self.kr
         dtype = self.dtype

@@ -1,8 +1,6 @@
 # Copyright 2020, Igor Andriyash
 # Authors: Igor Andriyash
 # License: GPL3
-
-import sys
 from setuptools import setup, find_packages
 import axiprop
 

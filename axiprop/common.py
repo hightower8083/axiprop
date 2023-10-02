@@ -9,11 +9,9 @@ This file contains common classed of axiprop:
 - PropagatorExtras
 """
 import numpy as np
-from scipy.special import jn, jn_zeros
+from scipy.special import jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
 import os
-from scipy.constants import c, e, m_e, epsilon_0
-from scipy.integrate import trapezoid
 
 try:
     from unwrap import unwrap as unwrap2d
