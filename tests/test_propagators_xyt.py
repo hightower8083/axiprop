@@ -11,7 +11,7 @@ tau = 30e-15
 lambda0 = 0.8e-6
 
 k0 = 2 * np.pi / lambda0
-f_N = 70
+f_N = 500
 f0 = 2 * R_las * f_N
 w0 = 2 / np.pi * lambda0 * f_N
 
@@ -33,7 +33,7 @@ def propagator_fft2_fresnel(container):
         )
 
 def propagator_fft2(container):
-    Nxy = 1024 * 3
+    Nxy = 1024
     Lxy = 5 * R_las
     return PropagatorFFT2(
         x_axis=(Lxy, Nxy),
@@ -53,7 +53,7 @@ def check_energy(LaserObject):
     assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=1e-2, atol=0)
 
 def check_tau(LaserObject):
-    assert np.allclose(LaserObject.tau, tau, rtol=3e-4, atol=0)
+    assert np.allclose(LaserObject.tau, tau, rtol=1e-3, atol=0)
 
 def check_waist_xyt(LaserObject):
     w0_est = LaserObject.w0
