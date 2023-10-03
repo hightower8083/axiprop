@@ -23,7 +23,8 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pip install numpy scipy 
+        pip install numpy scipy
+        sudo apt-get install libffi-dev
         pip install cffi
         pip install unwrap
         pip install .
