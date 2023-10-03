@@ -19,7 +19,7 @@ try:
 except Exception:
     unwrap_available = False
 
-if unwrap_available:
+if not unwrap_available:
     try:
         from skimage.restoration import unwrap_phase
         def unwrap2d(u):
