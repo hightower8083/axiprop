@@ -9,17 +9,23 @@ This file contains common classed of axiprop:
 - PropagatorExtras
 """
 import numpy as np
-from scipy.special import jn, jn_zeros
+from scipy.special import jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
 import os
-from scipy.constants import c, e, m_e, epsilon_0
-from scipy.integrate import trapezoid
 
 try:
     from unwrap import unwrap as unwrap2d
     unwrap_available = True
 except Exception:
     unwrap_available = False
+
+if not unwrap_available:
+    try:
+        from skimage.restoration import unwrap_phase as unwrap2d
+    except Exception:
+        raise NotImplementedError(
+            "install `unwrap` or `scikit-image` for this propagator"
+            )
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -252,11 +258,9 @@ class CommonTools:
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
-        if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
-            return u_loc
-
-        if not unwrap_available:
-            raise NotImplementedError("install unwrap")
+        if x_loc.size==x_new.size and y_loc.size==y_new.size:
+            if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
+                return u_loc
 
         interp_fu_abs = RectBivariateSpline(
             x_loc, y_loc, np.abs(u_loc)

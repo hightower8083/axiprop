@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.constants import e, m_e, c, pi, epsilon_0, mu_0
+from scipy.constants import c
 from tqdm.auto import tqdm
 from ..containers import ScalarFieldEnvelope, apply_boundary_r
 from ..utils import refine1d
