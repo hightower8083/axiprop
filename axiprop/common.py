@@ -18,6 +18,9 @@ try:
     unwrap_available = True
 except Exception:
     unwrap_available = False
+    def unwrap2d(u):
+        u = np.unwrap(u)
+        return u
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -253,9 +256,6 @@ class CommonTools:
         if x_loc.size==x_new.size and y_loc.size==y_new.size:
             if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
                 return u_loc
-
-        if not unwrap_available:
-            raise NotImplementedError("install unwrap")
 
         interp_fu_abs = RectBivariateSpline(
             x_loc, y_loc, np.abs(u_loc)
