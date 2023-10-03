@@ -24,7 +24,7 @@ jobs:
     - name: Test with pytest
       run: |
         pip install numpy scipy
-        sudo apt-get install libffi-dev
+        sudo apt-get install build-essential libssl-dev libffi-dev python3-dev
         pip install cffi
         pip install unwrap
         pip install .
