@@ -21,10 +21,7 @@ except Exception:
 
 if not unwrap_available:
     try:
-        from skimage.restoration import unwrap_phase
-        def unwrap2d(u):
-            u = unwrap_phase(u)
-            return u
+        from skimage.restoration import unwrap_phase as unwrap2d
     except Exception:
         raise NotImplementedError(
             "install `unwrap` or `scikit-image` for this propagator"
