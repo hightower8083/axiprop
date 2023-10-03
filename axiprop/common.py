@@ -18,9 +18,17 @@ try:
     unwrap_available = True
 except Exception:
     unwrap_available = False
-    def unwrap2d(u):
-        u = np.unwrap(u)
-        return u
+
+if unwrap_available:
+    try:
+        from skimage.restoration import unwrap_phase
+        def unwrap2d(u):
+            u = unwrap_phase(u)
+            return u
+    except Exception:
+        raise NotImplementedError(
+            "install `unwrap` or `scikit-image` for this propagator"
+            )
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
