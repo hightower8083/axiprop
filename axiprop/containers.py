@@ -290,6 +290,18 @@ class ScalarFieldEnvelope:
         )
         return tau
 
+    @property
+    def dt_to_center(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = np.average(self.t, weights=fld_onax)
+        return dt
+
+    @property
+    def dt_to_peak(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = self.t[fld_onax==fld_onax.max()].mean()
+        return dt
+
     def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
         """

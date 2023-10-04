@@ -10,11 +10,14 @@ class Simulation:
                  n_dump_current=0,
                  n_dump_field=0,
                  open_boundaries_r=False,
+                 physprocs = [],
                  max_wavelength=4e-6,
                  refine_ord=1,
+                 pulse_centering=False,
                  verbose=True):
 
         self.prop = prop
+        self.physprocs = physprocs
 
         self.k0 = k0
         self.omega0 = k0 * c
@@ -22,7 +25,9 @@ class Simulation:
         self.EnvArgs = (self.k0, self.t_axis, n_dump_current)
         self.z_0 = z_0
         self.z_loc = z_0
+        self.dt_shift = 0.0
         self.open_boundaries_r = open_boundaries_r
+        self.pulse_centering = pulse_centering
 
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
@@ -53,7 +58,8 @@ class Simulation:
         if open_boundaries_r:
             self.dump_mask = np.zeros(n_dump_field)
             r_dump = np.linspace(0, 1, n_dump_field//2)
-            self.dump_mask[:n_dump_field//2] = ( 1 - np.exp(-(2 * r_dump)**6) )[::-1]
+            self.dump_mask[:n_dump_field//2] = \
+                ( 1 - np.exp(-(2 * r_dump)**6) )[::-1]
             self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
         if not hasattr(prop, 'omega') :
@@ -69,16 +75,21 @@ class Simulation:
             # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
         self.diags = {}
-        for diag_str in tuple(diag_fields) + ('z_axis',):
+        diags_default = ('z_axis',)
+        if self.pulse_centering:
+            diags_default += ('dt_shift',)
+
+        for diag_str in tuple(diag_fields) + diags_default:
             self.diags[diag_str] = []
         self.refine_ord = refine_ord
 
         self.verbose = verbose
 
-    def run(self, E0, Lz, dz0, N_diags, physprocs=[],
+    def run(self, E0, Lz, dz0, N_diags,
             method='RK4', adjust_dz=True, dz_min=2e-7, err_max=1e-2,
             growth_rate=None):
 
+        physprocs = self.physprocs
         for diag_str in ['n_e', 'T_e', 'Xi']:
             for i_physproc, physproc in enumerate(physprocs):
                 self.diags[ diag_str + str(i_physproc) ] = []
@@ -201,12 +212,25 @@ class Simulation:
 
         return En_ts, err
 
+    def _pulse_center(self, E_ft):
+        field = ScalarFieldEnvelope(*self.EnvArgs)
+        field.t += self.dt_shift
+        field.t_loc += self.dt_shift
+        field = field.import_field_ft(E_ft, transform=False)
+        self.dt_shift = field.dt_to_center - self.z_loc/c
+
     def _record_diags(self, E_fb, physprocs):
         self.diags['z_axis'].append(self.z_loc)
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
-        E_obj = ScalarFieldEnvelope(*self.EnvArgs).import_field_ft(
-            E_ft, r_axis=self.prop.r_new )
+        if self.pulse_centering:
+            self._pulse_center(E_ft)
+            self.diags['dt_shift'].append(self.dt_shift)
+
+        E_obj = ScalarFieldEnvelope(*self.EnvArgs)
+        E_obj.t += self.dt_shift
+        E_obj.t_loc += self.dt_shift
+        E_obj = E_obj.import_field_ft( E_ft, r_axis=self.prop.r_new )
 
         for i_physproc, physproc in enumerate(physprocs):
             i_physproc_str = str(i_physproc)
