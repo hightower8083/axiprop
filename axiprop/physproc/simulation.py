@@ -206,7 +206,7 @@ class Simulation:
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
         E_obj = ScalarFieldEnvelope(*self.EnvArgs).import_field_ft(
-            E_ft, r=self.prop.r_new )
+            E_ft, r_axis=self.prop.r_new )
 
         for i_physproc, physproc in enumerate(physprocs):
             i_physproc_str = str(i_physproc)
