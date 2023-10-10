@@ -130,7 +130,8 @@ def get_OFI_heating(
                     ion_fracts_loc[ion_state] -= new_events
 
                     all_new_events += new_events
-                    electron_temp_dens += W_ir * new_events
+                    # ideal electrons gas is assumed so `E = 3/2 k_B T`
+                    electron_temp_dens += 2. / 3. * W_ir * new_events
 
         if all_new_events>0:
             T_e[ir] = electron_temp_dens / all_new_events
