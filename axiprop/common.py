@@ -22,10 +22,9 @@ except Exception:
 if not unwrap_available:
     try:
         from skimage.restoration import unwrap_phase as unwrap2d
+        unwrap_available = True
     except Exception:
-        raise NotImplementedError(
-            "install `unwrap` or `scikit-image` for this propagator"
-            )
+        unwrap_available = False
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -255,6 +254,10 @@ class CommonTools:
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
+
+        if not unwrap_available:
+            raise NotImplementedError(
+                "install `unwrap` or `scikit-image` for this propagator")
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
