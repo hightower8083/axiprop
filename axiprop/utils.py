@@ -67,6 +67,55 @@ def refine1d_TR(A, refine_ord):
 
     return A_new
 
+
+def init_fresnel_rt( dz, k_axis, r_axis, r_axis_new ):
+    prop_args = {}
+    prop_args['kz_axis'] = k_axis
+    k_max = k_axis.max()
+
+    if type(r_axis_new) in (tuple, list):
+        assert ( len(r_axis_new) == 2 )
+        R_2, Nr_2 = r_axis_new
+    elif type(r_axis_new) is np.ndarray:
+        assert ( len(r_axis_new.shape) == 1 )
+        R_2 = r_axis_new.max()
+        Nr_2 = r_axis_new.size
+
+    prop_args['r_axis_new'] = r_axis_new
+
+    if type(r_axis) in (tuple, list):
+        assert ( len(r_axis) == 2 )
+        R_1, Nr_1 = r_axis
+        if Nr_1 is not None:
+            prop_args['r_axis'] = (R_1, Nr_1)
+    elif type(r_axis) is np.ndarray:
+        assert ( len(r_axis.shape) == 1 )
+        R_1 = r_axis.max()
+        Nr_1 = r_axis.size
+        prop_args['r_axis'] = r_axis
+
+    if Nr_1 is None:
+        Nr_1 = int( np.ceil( R_1 * R_2 * k_max / (np.pi * dz) ) )
+        prop_args['r_axis'] = (R_1, Nr_1)
+        N_pad = Nr_2 / Nr_1
+        if N_pad < 1 :
+            N_pad = 1
+    else:
+        dr_2 = R_2 / Nr_2
+        N_pad = np.pi * dz / (dr_2 * R_1 * k_max)
+        if N_pad < 1 :
+            N_pad = 1
+        R_2_eff = np.pi * dz * Nr_1 / R_1 / k_max
+        if R_2 <= R_2_eff:
+            prop_args['Nkr_new'] = int(np.ceil( N_pad * Nr_1 * R_2 / R_2_eff ))
+        else:
+            print('warning: higher `r_axis` resolution is needed')
+
+    prop_args['N_pad'] = N_pad
+
+    return prop_args
+
+
 def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
     """
     from scipy.special import binom
@@ -126,9 +175,9 @@ def mirror_parabolic(f0, kz, r):
     Generate array with spectra-radial phase
     representing the on-axis Parabolic Mirror
     """
-    s_ax = r**2/4/f0
+    s_ax = r**2 / 4 / f0
 
-    val = np.exp(   -2j * s_ax[None,:] * \
+    val = np.exp( -2j * s_ax[None,:] * \
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 

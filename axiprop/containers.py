@@ -97,8 +97,8 @@ class ScalarFieldEnvelope:
         r_dump = np.linspace(0, 1, n_dump)
         self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
 
-    def make_gaussian_pulse(self, r_axis, tau, w0, a0=None,
-                            Energy=None, t0=0.0, phi0=0.0, n_ord=2,
+    def make_gaussian_pulse(self, r_axis, tau, w0, a0=None, Energy=None,
+                            t0=0.0, phi0=0.0, n_ord=2,
                             omega0=None, transform=True):
         """
         Initialize the Gaussian pulse
@@ -289,6 +289,18 @@ class ScalarFieldEnvelope:
             - np.average(self.t, weights=fld_onax)**2
         )
         return tau
+
+    @property
+    def dt_to_center(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = np.average(self.t, weights=fld_onax)
+        return dt
+
+    @property
+    def dt_to_peak(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = self.t[fld_onax==fld_onax.max()].mean()
+        return dt
 
     def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
@@ -731,6 +743,18 @@ class ScalarField:
             - np.average(self.t, weights=fld_onax)**2
         )
         return tau
+
+    @property
+    def dt_to_center(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = np.average(self.t, weights=fld_onax)
+        return dt
+
+    @property
+    def dt_to_peak(self):
+        fld_onax = np.abs(self.get_temporal_slice())
+        dt = self.t[fld_onax==fld_onax.max()].mean()
+        return dt
 
     def import_field(self, Field, t_loc=None, r_axis=None,
                      transform=True, make_copy=False):
