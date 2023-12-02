@@ -67,9 +67,7 @@ def refine1d_TR(A, refine_ord):
 
     return A_new
 
-
-def init_fresnel_rt( dz, k_axis, r_axis, r_axis_new ):
-    prop_args = {}
+def init_fresnel_rt( dz, k_axis, r_axis, r_axis_new, **prop_args):
     prop_args['kz_axis'] = k_axis
     k_max = k_axis.max()
 
