@@ -505,7 +505,9 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         alpha = self.alpha
         kr = self.kr
 
-        _norm_coef = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
+        _norm_coef = np.zeros_like(alpha[:Nkr_new])
+        _norm_coef[1:] = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[1:Nkr_new]) )**2
+
         self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) \
             * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
