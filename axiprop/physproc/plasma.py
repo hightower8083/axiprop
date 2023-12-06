@@ -79,7 +79,6 @@ class PlasmaRelativistic:
 
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
-        k0, t_axis = sim.EnvArgs[:2]
         prop = self.sim.prop
         n_pe = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new )[None,:]
 
@@ -91,16 +90,18 @@ class PlasmaRelativistic:
 
         P_loc = -1j * e * E_loc * prop.omega_inv
 
-
-        P_loc_t = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field_ft(P_loc).Field
+        P_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        P_loc_obj.t += sim.dt_shift
+        P_loc_obj.t_loc += sim.dt_shift
+        P_loc_t = P_loc_obj.import_field_ft(P_loc).Field
 
         Jp_loc_t = - e * n_pe * P_loc_t / m_e \
             / np.sqrt( 1.0 + 0.5 * np.abs(P_loc_t)**2 * mc_m2 )
 
-
-        Jp_ft = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field(Jp_loc_t).Field
+        Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        Jp_obj.t += sim.dt_shift
+        Jp_obj.t_loc += sim.dt_shift
+        Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
 
         Jp_ts = prop.perform_transfer_TST( Jp_ft )
 
@@ -163,7 +164,6 @@ class PlasmaIonization(PlasmaRelativistic):
         sim = self.sim
         prop = self.sim.prop
         omega = sim.prop.kz[:, None] * c
-        k0, t_axis = sim.EnvArgs[:2]
 
         n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, prop.r_new )
 
@@ -176,11 +176,15 @@ class PlasmaIonization(PlasmaRelativistic):
         A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
 
-        E_loc_t = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field_ft(E_loc).Field
+        E_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        E_loc_obj.t += sim.dt_shift
+        E_loc_obj.t_loc += sim.dt_shift
+        E_loc_t = E_loc_obj.import_field_ft(E_loc).Field
 
-        A_loc_t = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field_ft(A_loc).Field
+        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_loc_obj.t += sim.dt_shift
+        A_loc_obj.t_loc += sim.dt_shift
+        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
 
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
             E_loc_t, A_loc_t, self.dt, n_gas,
@@ -188,8 +192,10 @@ class PlasmaIonization(PlasmaRelativistic):
             self.Uion, self.Z_init, self.Zmax, self.ionization_current
         )
 
-        Jp_ft = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field(Jp_loc_t).Field
+        Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        Jp_obj.t += sim.dt_shift
+        Jp_obj.t_loc += sim.dt_shift
+        Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
 
         Jp_ts = prop.perform_transfer_TST( Jp_ft )
 
@@ -244,20 +250,16 @@ class OFI_heating:
 
         sim = self.sim
         prop = self.sim.prop
-        k0, t_axis = sim.EnvArgs[:2]
         n_gas_loc = self.n_gas * self.dens_func( sim.z_loc, prop.r_new )
 
         E_loc_t =  E_obj.Field.copy()
 
         P_loc = -1j * e * E_obj.Field_ft * prop.omega_inv
 
-        #P_loc_t = ScalarFieldEnvelope(*sim.EnvArgs)
-        #P_loc_t.t += sim.dt_shift
-        #P_loc_t.t_loc += sim.dt_shift
-        #P_loc_t = P_loc_t.import_field_ft(P_loc).Field
-
-        P_loc_t = ScalarFieldEnvelope(k0, t_axis+sim.dt_shift)\
-            .import_field_ft(P_loc).Field
+        P_loc_t = ScalarFieldEnvelope(*sim.EnvArgs)
+        P_loc_t.t += sim.dt_shift
+        P_loc_t.t_loc += sim.dt_shift
+        P_loc_t = P_loc_t.import_field_ft(P_loc).Field
 
         if self.refine_ord>1:
             E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)

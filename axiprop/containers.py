@@ -170,8 +170,8 @@ class ScalarFieldEnvelope:
             self.k_freq_shaped = self.k_freq[:, None, None]
             self.k_freq_base_shaped = self.k_freq_base[:, None, None]
 
-        self.E0 = a0 * m_e * c * omega0 / e
-        self.Field = ( self.E0 * profile_t * profile_r[None,:] ) \
+        E0 = a0 * m_e * c * omega0 / e
+        self.Field = ( E0 * profile_t * profile_r[None,:] ) \
                         .astype(self.dtype)
 
         self.Field = apply_boundary_t(self.Field, self.dump_mask)
@@ -618,8 +618,8 @@ class ScalarField:
             profile_t = profile_t[:, None, None]
             self.k_freq_shaped = self.k_freq[:, None, None]
 
-        self.E0 = a0 * m_e * c * omega0 / e
-        self.Field = ( self.E0 * profile_t * profile_r[None,:] ) \
+        E0 = a0 * m_e * c * omega0 / e
+        self.Field = ( E0 * profile_t * profile_r[None,:] ) \
                         .astype(self.dtype)
 
         self.Field = apply_boundary_t(self.Field, self.dump_mask)
