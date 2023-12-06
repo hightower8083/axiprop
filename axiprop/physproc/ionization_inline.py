@@ -25,7 +25,7 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
 
     J_plasma = np.zeros_like(E_laser)
     n_e = np.zeros(Nr)
-    T_e = np.zeros(Nr)
+    IonizationEnergy = np.zeros(Nr)
 
     for ir in prange(Nr):
 
@@ -63,7 +63,8 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                     all_new_events += new_events
 
                     if ionization_current:
-                        T_e[ir] += n_gas_loc * new_events * Uion[ion_state]
+                        IonizationEnergy[ir] += n_gas_loc \
+                            * new_events * Uion[ion_state]
                         J_ion = n_gas_loc * new_events \
                             * Uion[ion_state] / E_ir_t[it] / dt
                         J_ir_t[it] += J_ion
@@ -75,7 +76,7 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
         n_e[ir] = n_e_slice[-1]
         J_plasma[:, ir] = J_ir_t.copy()
 
-    return J_plasma, n_e, T_e
+    return J_plasma, n_e, IonizationEnergy
 
 
 @jit(nopython=True, cache=True, parallel=True)
