@@ -184,6 +184,19 @@ class Simulation:
             k_tot = ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6
             k_lower = k2
 
+
+        val_intgral = 0.5 * bcknd.sum(
+            bcknd.abs(k_tot) + bcknd.abs(k_lower)
+        )
+
+        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
+
+        if val_intgral>0:
+            err = err_abs / val_intgral
+        else:
+            err = 0.0
+
+        # field advance
         En_ts += dz * k_tot
 
         if self.DC_filter is not None:
@@ -198,17 +211,7 @@ class Simulation:
 
         self.t_axis += dz / c
         self.z_loc += dz
-
-        val_intgral = 0.5 * bcknd.sum(
-            bcknd.abs(k_tot) + bcknd.abs(k_lower)
-        )
-
-        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
-
-        if val_intgral>0:
-            err = err_abs / val_intgral
-        else:
-            err = 0.0
+        # field advance: end
 
         return En_ts, err
 

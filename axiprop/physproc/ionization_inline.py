@@ -50,12 +50,19 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
 
         for it in range(Nt):
 
-            if np.abs(ion_fracts_loc[Zmax]-1)<1e-8:
+            if np.abs(ion_fracts_loc[Zmax]-1)<1e-16:
                 break
 
             probs = get_ADK_probability( np.abs( E_ir_t[it] ), dt, *pack_ADK )
 
             for ion_state in range(num_ions-1):
+
+                if probs[ion_state]<1e-8:
+                    continue
+
+                if ion_fracts_loc[ion_state]<1e-16:
+                    continue
+
                 new_events = ion_fracts_loc[ion_state] * probs[ion_state]
                 if new_events>0:
                     ion_fracts_loc[ion_state+1] += new_events
@@ -69,7 +76,7 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                             * Uion[ion_state] / E_ir_t[it] / dt
                         J_ir_t[it] += J_ion
 
-                n_e_slice[it:] += new_events * n_gas_loc
+                    n_e_slice[it:] += new_events * n_gas_loc
 
         J_ir_t = -e * n_e_slice * v_loc
 
