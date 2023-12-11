@@ -7,8 +7,10 @@ Axiprop utils file
 This file contains utility methods for Axiprop tool
 """
 import numpy as np
-from scipy.constants import c, e, m_e
+from scipy.constants import c
 from scipy.interpolate import interp1d
+
+from axiprop.containers import ScalarFieldEnvelope
 
 # try import numba and make dummy methods if cannot
 try:
@@ -23,7 +25,95 @@ except Exception:
             return func(*args, **kw_args)
         return func_wrp
 
-@njit
+def refine1d(A, refine_ord):
+    refine_ord = int(refine_ord)
+    x = np.arange(A.size, dtype=np.double)
+    x_new = np.linspace(x.min(), x.max(), x.size*refine_ord)
+
+    if A.dtype == np.double:
+        interp_fu = interp1d(x, A, assume_sorted=True)
+        A_new = interp_fu(x_new)
+    elif A.dtype == np.complex128:
+        interp_fu_abs = interp1d(x, np.abs(A), assume_sorted=True)
+        slice_abs = interp_fu_abs(x_new)
+
+        interp_fu_angl = interp1d(x, np.unwrap(np.angle(A)), assume_sorted=True)
+        slice_angl = interp_fu_angl(x_new)
+
+        A_new = slice_abs * np.exp(1j * slice_angl)
+    else:
+        print("Data type must be `np.double` or `np.complex128`")
+        return None
+
+    return A_new
+
+def refine1d_TR(A, refine_ord):
+    refine_ord = int(refine_ord)
+
+    t = np.arange(A.shape[0], dtype=np.double)
+    t_new = np.linspace(t.min(), t.max(), t.size*refine_ord)
+
+    A_new = np.zeros((t_new.size, A.shape[1]), dtype=A.dtype)
+
+    for ir in range(A.shape[1]):
+        interp_fu_abs = interp1d(t, np.abs(A[:, ir]), assume_sorted=True)
+        slice_abs = interp_fu_abs(t_new)
+
+        interp_fu_angl = interp1d( t, np.unwrap(np.angle(A[:, ir])),
+                                   assume_sorted=True )
+        slice_angl = interp_fu_angl(t_new)
+
+        A_new[:, ir] = slice_abs * np.exp(1j * slice_angl)
+
+    return A_new
+
+def init_fresnel_rt( dz, r_axis, kz_axis, r_axis_new, **prop_args):
+    prop_args['kz_axis'] = kz_axis
+    k_max = kz_axis.max()
+
+    if type(r_axis_new) in (tuple, list):
+        assert ( len(r_axis_new) == 2 )
+        R_2, Nr_2 = r_axis_new
+    elif type(r_axis_new) is np.ndarray:
+        assert ( len(r_axis_new.shape) == 1 )
+        R_2 = r_axis_new.max()
+        Nr_2 = r_axis_new.size
+
+    prop_args['r_axis_new'] = r_axis_new
+
+    if type(r_axis) in (tuple, list):
+        assert ( len(r_axis) == 2 )
+        R_1, Nr_1 = r_axis
+        if Nr_1 is not None:
+            prop_args['r_axis'] = (R_1, Nr_1)
+    elif type(r_axis) is np.ndarray:
+        assert ( len(r_axis.shape) == 1 )
+        R_1 = r_axis.max()
+        Nr_1 = r_axis.size
+        prop_args['r_axis'] = r_axis
+
+    if Nr_1 is None:
+        Nr_1 = int( np.ceil( R_1 * R_2 * k_max / (np.pi * dz) ) )
+        prop_args['r_axis'] = (R_1, Nr_1)
+        N_pad = Nr_2 / Nr_1
+        if N_pad < 1 :
+            N_pad = 1
+    else:
+        dr_2 = R_2 / Nr_2
+        N_pad = np.pi * dz / (dr_2 * R_1 * k_max)
+        if N_pad < 1 :
+            N_pad = 1
+        R_2_eff = np.pi * dz * Nr_1 / R_1 / k_max
+        if R_2 <= R_2_eff:
+            prop_args['Nkr_new'] = int(np.ceil( N_pad * Nr_1 * R_2 / R_2_eff ))
+        else:
+            print('warning: higher `r_axis` resolution is needed')
+
+    prop_args['N_pad'] = N_pad
+
+    return prop_args
+
+
 def unwrap1d(angl_in, period=2*np.pi, n_span=4, n_order=1):
     """
     from scipy.special import binom
@@ -83,9 +173,9 @@ def mirror_parabolic(f0, kz, r):
     Generate array with spectra-radial phase
     representing the on-axis Parabolic Mirror
     """
-    s_ax = r**2/4/f0
+    s_ax = r**2 / 4 / f0
 
-    val = np.exp(   -2j * s_ax[None,:] * \
+    val = np.exp( -2j * s_ax[None,:] * \
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 
@@ -94,7 +184,6 @@ def get_temporal_1d(u, u_t, t, kz):
     """
     Resonstruct temporal field distribution
     """
-    Nkz = u.shape
     Nt = t.size
 
     for it in prange(Nt):
@@ -108,7 +197,7 @@ def get_temporal_radial(u, u_t, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nr = u.shape
+    Nr = u.shape[1]
     Nt = t.size
 
     assert u_t.shape[-1] == Nr
@@ -125,7 +214,7 @@ def get_temporal_slice2d(u, u_t, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nx, Ny = u.shape
+    _, Nx, Ny = u.shape
     Nt = t.size
 
     assert u_t.shape[-1] == Nx
@@ -142,7 +231,7 @@ def get_temporal_3d(u, t, kz):
     """
     Resonstruct temporal-radial field distribution
     """
-    Nkz, Nx, Ny = u.shape
+    _, Nx, Ny = u.shape
     Nt = t.size
 
     u_t = np.empty((Nt, Nx, Ny))
@@ -154,6 +243,26 @@ def get_temporal_3d(u, t, kz):
                 u_t[it, ix, iy] = np.real(u[:, ix, iy] * FFT_factor).sum()
 
     return u_t
+
+def export_from_lasy(laser):
+    time_axis_indx = -1
+    omega0 = laser.profile.omega0
+    t_axis = laser.grid.axes[time_axis_indx]
+
+    if laser.dim == "rt":
+        Container = []
+        for i_m in range( laser.grid.azimuthal_modes.size ):
+            Container.append(
+                ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+                    np.transpose(laser.grid.field[i_m]).copy()
+                )
+            )
+    else:
+        Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+            np.transpose(laser.grid.field).copy()
+        )
+
+    return Container
 
 #### FBPIC profile
 @njit

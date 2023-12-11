@@ -19,6 +19,7 @@ from .common import CommonTools
 from .steppers import StepperFresnel
 from .steppers import StepperNonParaxial
 
+warnings.simplefilter("always")
 
 class PropagatorSymmetric(CommonTools, StepperNonParaxial):
     """
@@ -395,7 +396,7 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
 class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, Nkr_new=None,
-                 N_pad=4, mode=0, dtype=np.complex128,
+                 N_pad=1, mode=0, dtype=np.complex128,
                  backend=None, verbose=True):
         """
         The resampling RT propagator.
@@ -441,7 +442,8 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         if type(r_axis) is tuple:
             Rmax, Nr = r_axis
             self.Nr = Nr
-            r_axis_ext = ( N_pad * Rmax, N_pad * Nr )
+            Nr_ext_loc = int( np.round( N_pad * Nr  ) )
+            r_axis_ext = ( N_pad * Rmax, Nr_ext_loc )
             self.r_ext, self.Rmax_ext, self.Nr_ext = \
                             self.init_r_uniform(r_axis_ext)
 
@@ -456,9 +458,10 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             dr_est = (self.r[1:] - self.r[:-1]).mean()
             Rmax = self.r.max()
             self.Rmax = Rmax + 0.5 * dr_est
+            Nr_ext_add = int( np.round(  Nr*(N_pad-1) ) )
 
             self.r_ext = np.r_[ self.r,
-                Rmax + dr_est * np.arange( 1, Nr*(N_pad-1))
+                Rmax + dr_est * np.arange( 1, Nr_ext_add)
             ]
             self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
             self.Nr_ext = self.r_ext.size
@@ -468,7 +471,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         else:
             self.Nkr_new = Nkr_new
             if Nkr_new > Nr * N_pad:
-                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*N_pad} has no effect")
+                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*int(N_pad)} has no effect")
 
         if r_axis_new is None:
             self.Nr_new = self.Nkr_new
@@ -502,8 +505,16 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         alpha = self.alpha
         kr = self.kr
 
-        _norm_coef = 2.0 /  ( Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
-        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) * _norm_coef[None,:]
+        if mode==0:
+            _norm_coef = 2.0 /  (
+                Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
+        else:
+            _norm_coef = np.zeros_like(alpha[:Nkr_new])
+            _norm_coef[1:] = 2.0 /  (
+                Rmax_ext * jn(mode+1, alpha[1:Nkr_new]) )**2
+
+        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) \
+            * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:Nr]
 
@@ -534,10 +545,18 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.r_new =  dz * self.kr[:self.Nr_new] / self.kz.max()
 
         r_loc_min = dz * self.kr[:self.Nkr_new] / self.kz.max()
+
         if self.r_new.max()>r_loc_min.max():
             Nkr = int(self.r_new.max() / np.diff(r_loc_min).mean())
+            kz_max = self.kz[
+                self.kz > dz * self.kr[self.Nkr_new-1] / self.r_new.max()
+            ][0]
+
+            lambda_min = 2 * np.pi / kz_max
+
             warnings.warn(
-                "Extrapolation will be used and may cause noise. "
+                "New radius is not fully resolved, so some data for the "
+                + f"wavelengths below {lambda_min*1e9:g} nm may be lost. "
                 + f"In order to avoid this, define Nkr_new>{Nkr+1}.")
 
 
@@ -554,7 +573,7 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
     def __init__(self, x_axis, y_axis, kz_axis,
                  Nx_new=None, Ny_new=None,
-                 N_pad=2, dtype=np.complex128,
+                 N_pad=1, dtype=np.complex128,
                  backend=None, verbose=True):
         """
         Construct the propagator.
@@ -610,8 +629,8 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
         Lx_ext = N_pad * Lx
         Ly_ext = N_pad * Ly
-        Nx_ext = N_pad * Nx
-        Ny_ext = N_pad * Ny
+        Nx_ext = int( np.round(N_pad * Nx ))
+        Ny_ext = int( np.round( N_pad * Ny ))
 
         self.Nx = Nx
         self.Ny = Ny

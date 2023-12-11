@@ -9,17 +9,22 @@ This file contains common classed of axiprop:
 - PropagatorExtras
 """
 import numpy as np
-from scipy.special import jn, jn_zeros
+from scipy.special import jn_zeros
 from scipy.interpolate import interp1d, RectBivariateSpline
 import os
-from scipy.constants import c, e, m_e, epsilon_0
-from scipy.integrate import trapezoid
 
 try:
     from unwrap import unwrap as unwrap2d
     unwrap_available = True
 except Exception:
     unwrap_available = False
+
+if not unwrap_available:
+    try:
+        from skimage.restoration import unwrap_phase as unwrap2d
+        unwrap_available = True
+    except Exception:
+        unwrap_available = False
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
@@ -231,28 +236,34 @@ class CommonTools:
         interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
                                  fill_value='extrapolate',
                                  kind='cubic',
+                                 assume_sorted=True,
                                  bounds_error=False )
 
         interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
                                   fill_value='extrapolate',
                                   kind='cubic',
+                                  assume_sorted=True,
                                   bounds_error=False )
 
         u_slice_abs = interp_fu_abs(r_new)
         u_slice_angl = interp_fu_angl(r_new)
 
         u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        u_slice_new *= (r_new <= r_loc.max() )
+
         return u_slice_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
 
+        if not unwrap_available:
+            raise NotImplementedError(
+                "install `unwrap` or `scikit-image` for this propagator")
+
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
-        if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
-            return u_loc
-
-        if not unwrap_available:
-            raise NotImplementedError("install unwrap")
+        if x_loc.size==x_new.size and y_loc.size==y_new.size:
+            if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
+                return u_loc
 
         interp_fu_abs = RectBivariateSpline(
             x_loc, y_loc, np.abs(u_loc)
@@ -273,13 +284,6 @@ class PropagatorExtras:
     """
     Some experimental or obsolete stuff
     """
-    def apply_boundary(self, u, nr_boundary=16):
-        # apply the boundary "absorbtion"
-        absorb_layer_axis = np.r_[0 : np.pi/2 : nr_boundary*1j]
-        absorb_layer_shape = np.cos(absorb_layer_axis)**0.5
-        absorb_layer_shape[-1] = 0.0
-        u[:, -nr_boundary:] *= absorb_layer_shape
-        return u
 
     def get_Ez(self, ux):
         """
