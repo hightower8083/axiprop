@@ -1,6 +1,6 @@
-# Copyright 2020
-# Authors: Igor Andriyash
-# License: GNU GPL v3
+# Copyright 2023
+# Authors: Igor A Andriyash
+# License: BSD-3-Clause
 """
 Axiprop backends
 

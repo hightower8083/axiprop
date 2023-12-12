@@ -1,6 +1,6 @@
 # Copyright 2020, Igor Andriyash
 # Authors: Igor Andriyash
-# License: GPL3
+# License: BSD-3-Clause
 from setuptools import setup, find_packages
 import axiprop
 
@@ -24,7 +24,7 @@ setup(
     author='Igor Andriyash',
     maintainer='Igor Andriyash',
     maintainer_email='igor.andriyash@gmail.com',
-    license='GPL3',
+    license='BSD-3-Clause',
     license_files=["LICENSE",],
     packages=find_packages('.'),
     package_data={"": ['*']},
