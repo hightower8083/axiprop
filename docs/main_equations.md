@@ -1,18 +1,18 @@
 ## Basic model
 
-For optical propagation we need to describe evolution of electromagnetic field from the state defined at some time and space region to the state that it has after some time and in a different space region. This computation follows from the Maxwell equations for electric and magnetic fields:
+For optical propagation we calculate the electromagnetic field that evolves from the state defined at some time and space, to another state that it takes after some time, and typically in a different location. Formally, for this me need to consider the vectorial Maxwell equations for electric and magnetic fields,
 
-$$ \nabla \times \mathbf{E} = - \partial_t \mathbf{B} $$
+$$ \nabla \times \mathbf{E} = - \partial_t \mathbf{B}, $$
 
-$$ \nabla \times \mathbf{B} = \frac{1}{c^2} \partial_t \mathbf{E} + \mu_0 \mathbf{J}$$
+$$ \nabla \times \mathbf{B} = \frac{1}{c^2} \partial_t \mathbf{E} + \mu_0 \mathbf{J},$$
 
-In most cases that concern laser pulse propagation, it is enough to describe electric components of the field, for which we can find the equation by combinng the above ones:
+For the partical case of the optical field it is typically enough to describe the electric field, for which the equation can be written by combining the above equations:
 
 $$ \nabla \times \nabla \times \mathbf{E} = \nabla (\nabla \mathbf{E}) - \nabla^2 \mathbf{E} = - \partial_t \left( \frac{1}{c^2} 
 \partial_t \mathbf{E} + \mu_0 \mathbf{J}\right) = - \frac{1}{c^2} \partial_t^2 \mathbf{E} - \mu_0  \partial_t\mathbf{J}$$
 
 The term $\nabla (\nabla \mathbf{E})$ here describes contributions of charge density perturbations (plasma waves) which 
-we may neglect, and for the acccount of fast media resopnse we can use:
+we may neglect, and to account for the fast media resopnse we can use:
 
 $$ \nabla^2 \mathbf{E} = \frac{1}{c^2}  \partial_t^2 \mathbf{E} + \mu_0  \partial_t\mathbf{J} $$
 
