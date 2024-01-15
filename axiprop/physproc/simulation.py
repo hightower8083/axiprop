@@ -86,8 +86,8 @@ class Simulation:
         self.verbose = verbose
 
     def run(self, E0, Lz, dz0, N_diags,
-            method='RK4', adjust_dz=True, dz_min=2e-7, err_max=1e-2,
-            growth_rate=None):
+            method='RK4', adjust_dz=True, dz_min=2e-7,
+            err_max=1e-2, growth_rate=None):
 
         physprocs = self.physprocs
         for diag_str in ['n_e', 'T_e', 'Xi']:
@@ -109,7 +109,7 @@ class Simulation:
         if self.verbose:
             self._pbar_init(Lz)
 
-        while (self.z_loc < self.z_0 + Lz) :
+        while (self.z_loc <= self.z_0 + Lz) :
             # record diagnostics data
             if do_diag_next:
                 self._record_diags(En_ts, physprocs)
@@ -148,6 +148,10 @@ class Simulation:
         k1 = 0.0
         for physproc in physprocs:
             k1 += physproc.get_RHS( En_ts )
+
+            if hasattr(physproc, 'integral_JdotE'):
+                physproc.integral_JdotE += 2 * np.pi * dz * \
+                    np.sum(physproc.T_e * self.prop.r * np.gradient(self.prop.r))
 
         if method in ['Ralston', 'MP', 'RK4']:
             if method=='Ralston':
@@ -254,7 +258,7 @@ class Simulation:
             self.diags['E_ft'].append(E_obj.Field_ft)
 
         if 'E_ft_onax' in self.diags.keys():
-            self.diags['E_ft'].append(E_obj.Field_ft[:, 0])
+            self.diags['E_ft_onax'].append(E_obj.Field_ft[:, 0])
 
         if 'E_t_env' in self.diags.keys():
             self.diags['E_t_env'].append(E_obj.Field)

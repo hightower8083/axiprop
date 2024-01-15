@@ -70,8 +70,8 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
                     all_new_events += new_events
 
                     if ionization_current:
-                        IonizationEnergy[ir] += n_gas_loc \
-                            * new_events * Uion[ion_state]
+                        #IonizationEnergy[ir] += n_gas_loc \
+                        #    * new_events * Uion[ion_state]
                         J_ion = n_gas_loc * new_events \
                             * Uion[ion_state] / E_ir_t[it] / dt
                         J_ir_t[it] += J_ion
@@ -82,6 +82,8 @@ def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
 
         n_e[ir] = n_e_slice[-1]
         J_plasma[:, ir] = J_ir_t.copy()
+
+        IonizationEnergy[ir] = 0.5 * np.real((J_ir_t * np.conj(E_ir_t))).sum() * dt
 
     return J_plasma, n_e, IonizationEnergy
 
