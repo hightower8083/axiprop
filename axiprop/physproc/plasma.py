@@ -132,8 +132,10 @@ class PlasmaIonization(PlasmaRelativistic):
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
 
-        omega = sim.prop.kz[:, None] * c
-        self.lowpass_filt = np.cos(0.5 * np.pi * omega / omega.max() )**2
+        omega_shift = sim.prop.kz[:, None] * c - sim.omega0
+        self.lowpass_filt = np.cos(
+            0.5 * np.pi * omega_shift / omega_shift.max()
+        )
 
     def make_ADK(self, my_element, ionization_mode):
         """
