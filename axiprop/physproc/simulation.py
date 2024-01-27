@@ -149,10 +149,6 @@ class Simulation:
         for physproc in physprocs:
             k1 += physproc.get_RHS( En_ts )
 
-            if hasattr(physproc, 'integral_JdotE'):
-                physproc.integral_JdotE += 2 * np.pi * dz * \
-                    np.sum(physproc.T_e * self.prop.r * np.gradient(self.prop.r))
-
         if method in ['Ralston', 'MP', 'RK4']:
             if method=='Ralston':
                 C_k2 = 2./3

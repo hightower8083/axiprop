@@ -3,12 +3,15 @@ import numpy as np
 from scipy.constants import e, m_e, c, pi, epsilon_0
 from scipy.constants import mu_0, fine_structure
 from scipy.special import gamma as gamma_func
+from scipy.signal import hilbert
 from mendeleev import element as table_element
 
 from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d, refine1d_TR
 from .ionization_inline import get_plasma_ADK
+from .ionization_inline import get_plasma_ADK_ref
 from .ionization_inline import get_OFI_heating
+
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
 mc_m2 = 1. / ( m_e * c )**2
@@ -123,13 +126,14 @@ class PlasmaIonization(PlasmaRelativistic):
         self.n_gas = n_gas
 
         self.T_e = 0.0
-        self.integral_JdotE = 0.0
-
         self.Z_init = Z_init
         self.Zmax = Zmax
         self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
+
+        omega = sim.prop.kz[:, None] * c
+        self.lowpass_filt = np.cos(0.5 * np.pi * omega / omega.max() )**2
 
     def make_ADK(self, my_element, ionization_mode):
         """
@@ -199,6 +203,8 @@ class PlasmaIonization(PlasmaRelativistic):
         Jp_obj.t += sim.dt_shift
         Jp_obj.t_loc += sim.dt_shift
         Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
+
+        Jp_ft *= self.lowpass_filt
 
         Jp_ts = prop.perform_transfer_TST( Jp_ft )
 
@@ -275,3 +281,78 @@ class OFI_heating:
             E_loc_t, P_loc_t, t_axis, sim.omega0, n_gas_loc,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
             self.Z_init, self.Zmax)
+
+
+class PlasmaIonizationRefine(PlasmaIonization):
+
+    def __init__( self, n_gas, dens_func, sim, my_element,
+                  Z_init=0, Zmax=-1, ionization_current=True,
+                  ionization_mode='DC', refine_ord=8, **kw_args):
+
+        super().__init__(n_gas, dens_func, sim,
+            my_element=my_element, Z_init=Z_init, Zmax=Zmax,
+            ionization_current=ionization_current,
+            ionization_mode=ionization_mode)
+
+        self.refine_ord = refine_ord
+
+    def get_RHS(self, E_ts, dz=0.0 ):
+        sim = self.sim
+        prop = self.sim.prop
+        omega = sim.prop.kz[:, None] * c
+
+        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, prop.r_new )
+
+        if dz != 0.0:
+            sim.t_axis += dz / c
+            E_loc = prop.step_and_iTST_transfer(E_ts, dz)
+        else:
+            E_loc = prop.perform_iTST_transfer(E_ts)
+
+        A_loc = -1j * prop.omega_inv * E_loc
+        A_loc *= (omega>0.0)
+
+        E_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        E_loc_obj.t += sim.dt_shift
+        E_loc_obj.t_loc += sim.dt_shift
+        E_loc_t = E_loc_obj.import_field_ft(E_loc).Field
+
+        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_loc_obj.t += sim.dt_shift
+        A_loc_obj.t_loc += sim.dt_shift
+        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
+
+        if self.refine_ord>1:
+            E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)
+            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord)
+            t_axis  = refine1d(sim.t_axis, self.refine_ord)
+        else:
+            t_axis = sim.t_axis.copy()
+
+        Jp_loc_t_re, self.n_e, self.T_e, self.Xi = get_plasma_ADK_ref(
+            E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
+            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        )
+
+        Jp_loc_t = np.exp(1j * sim.omega0 * sim.t_axis)[:, None] \
+            * np.conj(
+                hilbert(Jp_loc_t_re, axis=0)[::self.refine_ord]
+              )
+
+        Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        Jp_obj.t += sim.dt_shift
+        Jp_obj.t_loc += sim.dt_shift
+        Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
+
+        Jp_ft *= self.lowpass_filt
+
+        Jp_ts = prop.perform_transfer_TST( Jp_ft )
+
+        if dz != 0.0:
+            sim.t_axis -= dz / c
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
+
+        Jp_ts *= self.coef_RHS
+
+        return Jp_ts
