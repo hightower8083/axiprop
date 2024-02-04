@@ -27,8 +27,9 @@ except Exception:
 
 def refine1d(A, refine_ord):
     refine_ord = int(refine_ord)
-    x = np.arange(A.size, dtype=np.double)
-    x_new = np.linspace(x.min(), x.max(), x.size*refine_ord)
+    Nx = A.size
+    x = np.arange(Nx, dtype=np.double)
+    x_new = np.linspace(x.min(), x.max(), refine_ord * (Nx-1) + 1 )
 
     if A.dtype == np.double:
         interp_fu = interp1d(x, A, assume_sorted=True)
@@ -49,9 +50,10 @@ def refine1d(A, refine_ord):
 
 def refine1d_TR(A, refine_ord):
     refine_ord = int(refine_ord)
+    Nx = A.shape[0]
 
-    t = np.arange(A.shape[0], dtype=np.double)
-    t_new = np.linspace(t.min(), t.max(), t.size*refine_ord)
+    t = np.arange(Nx, dtype=np.double)
+    t_new = np.linspace(t.min(), t.max(), refine_ord * (Nx-1) + 1)
 
     A_new = np.zeros((t_new.size, A.shape[1]), dtype=A.dtype)
 
