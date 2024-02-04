@@ -115,13 +115,38 @@ Let us calculate the field $E_1(x,y,t) = E(x,y,z_0+\Delta z, t)$ for a known $E_
 
 ```math
 \begin{aligned}
-& \partial_z^2 \; \mathbf{E} =  \frac{1}{c^2} \;\partial_t^2 \;\mathbf{E} \;-\; \nabla_\perp^2 \;\mathbf{E} + \mu_0 \; \partial_t \; \mathbf{J} \,,
+& \partial_z^2 \; \mathbf{E} =  \frac{1}{c^2} \;\partial_t^2 \;\mathbf{E} \;-\; \nabla_\perp^2 \;\mathbf{E} + \mu_0 \; \partial_t \; \mathbf{J} \,, \qquad (2)
 \end{aligned}
 ```
 
 where $\nabla_\perp^2 = \partial_x^2 + \partial_y^2$ for the problem defined in the cartesian geometry $(x,y,t)$, and $\nabla_{\perp}^2 = \cfrac{1}{r}\; \partial_r (r \; \partial_r) +  \cfrac{1}{r^2} \; \partial_\theta^2$ in the cylindrical coordiantes $(r, \theta, t)$.
 
-Let us consider the problem 
+# Spectral methods
 
+All our computations will adopt the so-called *spectral* methods. In the optical problems this commonly involves presentation of the field and the source terms as the sums of the waves both temporally and in the transverse plane.
+
+For the **cartesian** geometry such decomposition is well-known as the spatio-temporal Fourier series:
+
+```math
+\begin{aligned}
+& A (x,y,t) = Re \left [ \sum_{ k_x, k_y, \omega} \; \hat{A}(k_x, k_y, \omega) \; \exp(ik_x x + ik_y y-i \omega t) \right ]\,,
+\end{aligned}
+```
+
+and for the **cylindrical** coordiantes we define is as the Fourier-Bessel (or Fourier-Hankel) series:
+
+```math
+\begin{aligned}
+& A (r,\theta,t) = Re \left [ \sum_{k_r, m, \omega} \; \hat{A}(k_r, m, \omega) \; J_m(k_r r) \; \exp(-i m \theta-i \omega t) \right ]
+\end{aligned}
+```
+
+The properties of such representations are defined by the sampling that we choose in the real and spectral spaces. For the case of spatio-temporal Fourier series, it is well known that uniform sampling in space
+
+Both these representations transform the first two terms in the right hand side of Eq(2) into:
+
+```math
+\frac{1}{c^2} \;\partial_t^2 \;\mathbf{E} \;-\; \nabla_\perp^2 \;\mathbf{E} \to -(\omega^2 - k_r^2) \hat{E}
+```
 
 ## [Return to README](https://github.com/hightower8083/axiprop/blob/new-docs/README.md#documentation)
