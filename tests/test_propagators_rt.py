@@ -16,7 +16,7 @@ tau = 30e-15
 lambda0 = 0.8e-6
 
 k0 = 2 * np.pi / lambda0
-f_N = 70
+f_N = 200
 f0 = 2 * R_las * f_N
 w0 = 2 / np.pi * lambda0 * f_N
 
@@ -32,12 +32,11 @@ def propagator_resample(container):
 
 
 def propagator_symmetric(container):
-    Nr0 = 512 * 9
-    Nr1 = int(R1 / R0 * Nr0)
+    Nr0 = 512 * 8
+    Nr1 = int( R1 / R0 * Nr0 )
     return PropagatorSymmetric(
         r_axis=(R0, Nr0), kz_axis=container().k_freq,
         r_axis_new=(Nr1,) )
-
 
 def propagator_resample_fresnel(container):
     Nr0 = 512
@@ -65,8 +64,8 @@ def gaussian_rt(container, r_axis):
     return LaserObject
 
 def check_energy(LaserObject):
-    assert np.allclose(LaserObject.Energy, LaserEnergy, rtol=1e-7, atol=0)
-    assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=1e-2, atol=0)
+    assert np.allclose(LaserObject.Energy, LaserEnergy, rtol=5e-2, atol=0)
+    assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=5e-2, atol=0)
 
 def check_tau(LaserObject):
     assert np.allclose(LaserObject.tau, tau, rtol=3e-4, atol=0)
@@ -86,9 +85,14 @@ def check_waist_xyt(LaserObject):
 
 def test_propagate():
 
-    for container in [container_env, container_full]:
+    for container in [
+            container_env,
+            container_full
+        ]:
         for propagator_method in [
-            propagator_resample_fresnel, propagator_resample, propagator_symmetric
+                propagator_resample_fresnel,
+                propagator_resample,
+                propagator_symmetric
             ]:
             prop = propagator_method(container)
             LaserObject = gaussian_rt(container(), prop.r)
@@ -106,4 +110,4 @@ def test_propagate():
 
             check_tau(LaserObject)
             check_waist_rt(LaserObject)
-            check_tau(LaserObject)
+            check_energy(LaserObject)

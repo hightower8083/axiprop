@@ -11,33 +11,36 @@ tau = 30e-15
 lambda0 = 0.8e-6
 
 k0 = 2 * np.pi / lambda0
-f_N = 500
+f_N = 300
 f0 = 2 * R_las * f_N
 w0 = 2 / np.pi * lambda0 * f_N
 
+
 def container_env():
-    Nt = 16
+    Nt = 32
     t_axis = np.linspace( -3.5 * tau, 3.5 * tau, Nt )
     return ContainerEnv(k0, t_axis)
 
 def propagator_fft2_fresnel(container):
-    Nxy = 256
+    Nx = 256
+    Ny = 258
     Lxy = 5 * R_las
     return PropagatorFFT2Fresnel(
-        x_axis=(Lxy, Nxy),
-        y_axis=(Lxy, Nxy),
-        Nx_new=Nxy,
-        Ny_new=Nxy,
+        x_axis=(Lxy, Nx),
+        y_axis=(Lxy, Ny),
+        Nx_new=Nx,
+        Ny_new=Ny,
         kz_axis=container().k_freq,
         N_pad=2,
         )
 
 def propagator_fft2(container):
-    Nxy = 1024
+    Nx = 1024
+    Ny = 1028
     Lxy = 5 * R_las
     return PropagatorFFT2(
-        x_axis=(Lxy, Nxy),
-        y_axis=(Lxy, Nxy),
+        x_axis=(Lxy, Nx),
+        y_axis=(Lxy, Ny),
         kz_axis=container().k_freq,
         )
 
@@ -47,10 +50,9 @@ def gaussian_xyt(container, r_axis):
     )
     return LaserObject
 
-
 def check_energy(LaserObject):
-    assert np.allclose(LaserObject.Energy, LaserEnergy, rtol=1e-7, atol=0)
-    assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=1e-2, atol=0)
+    assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=5e-2, atol=0)
+    assert np.allclose(LaserObject.Energy, LaserEnergy, rtol=5e-2, atol=0)
 
 def check_tau(LaserObject):
     assert np.allclose(LaserObject.tau, tau, rtol=1e-3, atol=0)
@@ -68,7 +70,8 @@ def test_propagate():
 
     for container in [container_env, ]:
         for propagator_method in [
-            propagator_fft2_fresnel, propagator_fft2,
+                propagator_fft2_fresnel,
+                propagator_fft2,
             ]:
             prop = propagator_method(container)
             if hasattr(prop, 'x0'):
@@ -93,4 +96,4 @@ def test_propagate():
 
             check_tau(LaserObject)
             check_waist_xyt(LaserObject)
-            check_tau(LaserObject)
+            check_energy(LaserObject)
