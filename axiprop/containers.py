@@ -206,7 +206,7 @@ class ScalarFieldEnvelope:
             )
         else:
             dx = self.x[[0,1]].ptp()
-            dy = self.x[[0,1]].ptp()
+            dy = self.y[[0,1]].ptp()
             cdt = c * self.t[[0,1]].ptp()
             Energy = np.pi * epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
@@ -230,7 +230,7 @@ class ScalarFieldEnvelope:
             )
         else:
             dx = self.x[[0,1]].ptp()
-            dy = self.x[[0,1]].ptp()
+            dy = self.y[[0,1]].ptp()
 
             Energy = np.pi * epsilon_0 * c * self.t.ptp() * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
@@ -252,7 +252,7 @@ class ScalarFieldEnvelope:
         else:
             I_norm = np.abs(self.Field**2)
             spot_x = I_norm.sum(0).sum(-1)
-            spot_y = I_norm.sum(0).sum(1)
+            spot_y = I_norm.sum(0).sum(0)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
             w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
@@ -274,7 +274,7 @@ class ScalarFieldEnvelope:
         else:
             I_norm = np.abs(self.Field_ft**2)
             spot_x = I_norm.sum(0).sum(-1)
-            spot_y = I_norm.sum(0).sum(1)
+            spot_y = I_norm.sum(0).sum(0)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) - np.average(self.x, weights=spot_x)**2)
             w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) - np.average(self.y, weights=spot_y)**2)
             w0 = (w0_x, w0_y)
@@ -654,7 +654,7 @@ class ScalarField:
             )
         else:
             dx = self.x[[0,1]].ptp()
-            dy = self.x[[0,1]].ptp()
+            dy = self.y[[0,1]].ptp()
             cdt = c * self.t[[0,1]].ptp()
             Energy = 2 * np.pi * epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
@@ -679,7 +679,7 @@ class ScalarField:
             )
         else:
             dx = self.x[[0,1]].ptp()
-            dy = self.x[[0,1]].ptp()
+            dy = self.y[[0,1]].ptp()
 
             Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
@@ -702,7 +702,7 @@ class ScalarField:
         else:
             I_norm = np.abs(self.Field)**2
             spot_x = I_norm.sum(0).sum(-1)
-            spot_y = I_norm.sum(0).sum(1)
+            spot_y = I_norm.sum(0).sum(0)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
                                 - np.average(self.x, weights=spot_x)**2)
             w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) \
@@ -726,7 +726,7 @@ class ScalarField:
         else:
             I_norm = np.abs(self.Field_ft)**2
             spot_x = I_norm.sum(0).sum(-1)
-            spot_y = I_norm.sum(0).sum(1)
+            spot_y = I_norm.sum(0).sum(0)
             w0_x = 2 * np.sqrt(np.average(self.x**2, weights=spot_x) \
                                 - np.average(self.x, weights=spot_x)**2)
             w0_y = 2 * np.sqrt(np.average(self.y**2, weights=spot_y) \
