@@ -239,13 +239,13 @@ class CommonTools:
 
         u_slice_composed = np.interp(
             r_new, r_loc, u_composed,
-            left=None, right=0)
+            left=None, right=0.0)
 
-        u_slice_new = np.abs(np.real(u_slice_composed)) \
+        u_new = np.abs(np.real(u_slice_composed)) \
             * np.exp( 1j * np.imag(u_slice_composed) )
-        u_slice_new *= (r_new <= r_loc.max() )
+        u_new *= (r_new <= r_loc.max() )
 
-        return u_slice_new
+        return u_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
 
@@ -262,13 +262,13 @@ class CommonTools:
         u_composed = np.abs(u_loc) + 1.0j * unwrap2d(np.angle(u_loc))
 
         fu_interp = RegularGridInterpolator(
-            (x_loc, y_loc), u_composed,
+            (y_loc, x_loc), u_composed,
             bounds_error=False,
-            method='linear',
+            # method='cubic',
             fill_value=0.0
         )
 
-        u_new_composed = fu_interp((x_new, y_new))
+        u_new_composed = fu_interp((y_new, x_new))
 
         u_new = np.abs(np.real(u_new_composed)) \
             * np.exp( 1j * np.imag(u_new_composed) )
