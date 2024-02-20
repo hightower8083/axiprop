@@ -21,23 +21,25 @@ def container_env():
     return ContainerEnv(k0, t_axis)
 
 def propagator_fft2_fresnel(container):
-    Nxy = 256
+    Nx = 256
+    Ny = 258
     Lxy = 5 * R_las
     return PropagatorFFT2Fresnel(
-        x_axis=(Lxy, Nxy),
-        y_axis=(Lxy, Nxy),
-        Nx_new=Nxy,
-        Ny_new=Nxy,
+        x_axis=(Lxy, Nx),
+        y_axis=(Lxy, Ny),
+        Nx_new=Nx,
+        Ny_new=Ny,
         kz_axis=container().k_freq,
         N_pad=2,
         )
 
 def propagator_fft2(container):
-    Nxy = 1024
+    Nx = 1024
+    Ny = 1024
     Lxy = 5 * R_las
     return PropagatorFFT2(
-        x_axis=(Lxy, Nxy),
-        y_axis=(Lxy, Nxy),
+        x_axis=(Lxy, Nx),
+        y_axis=(Lxy, Ny),
         kz_axis=container().k_freq,
         )
 
@@ -93,4 +95,4 @@ def test_propagate():
 
             check_tau(LaserObject)
             check_waist_xyt(LaserObject)
-            check_tau(LaserObject)
+            check_energy(LaserObject)
