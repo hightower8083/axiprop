@@ -11,7 +11,7 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn_zeros
 from scipy.interpolate import RectBivariateSpline
-from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import PchipInterpolator
 import os
 
 try:
@@ -235,14 +235,20 @@ class CommonTools:
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
 
-        u_composed = np.abs(u_loc) + 1.0j * np.unwrap(np.angle(u_loc))
+        fu_new_abs = PchipInterpolator(
+            r_loc, np.abs(u_loc),
+            extrapolate=True
+        )
 
-        u_slice_composed = np.interp(
-            r_new, r_loc, u_composed,
-            left=None, right=0.0)
+        fu_new_angl = PchipInterpolator(
+            r_loc, np.unwrap(np.angle(u_loc)),
+            extrapolate=True
+        )
 
-        u_new = np.abs(np.real(u_slice_composed)) \
-            * np.exp( 1j * np.imag(u_slice_composed) )
+        u_new_abs = fu_new_abs(r_new)
+        u_new_angl = fu_new_angl(r_new)
+
+        u_new = np.abs(u_new_abs) * np.exp( 1j * u_new_angl )
         u_new *= (r_new <= r_loc.max() )
 
         return u_new
@@ -259,27 +265,21 @@ class CommonTools:
             if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
                 return u_loc
 
-        u_composed = np.abs(u_loc) + 1.0j * unwrap2d(np.angle(u_loc))
-
-        """
-        fu_interp = RectBivariateSpline(
-            x_loc, y_loc, u_composed
+        fu_interp_abs = RectBivariateSpline(
+            x_loc, y_loc, np.abs(u_loc),
+            kx=3, ky=3,
         )
 
-        u_new_composed = fu_interp(x_new, y_new)
-
-        """
-
-        fu_interp = RegularGridInterpolator(
-            (x_loc, y_loc), u_composed.T,
-            bounds_error=False,
-            # method='cubic',
-            fill_value=0.0
+        fu_interp_angl = RectBivariateSpline(
+            x_loc, y_loc, unwrap2d(np.angle(u_loc)),
+            kx=3, ky=3,
         )
-        u_new_composed = fu_interp((y_new, x_new)).T
 
-        u_new = np.abs(np.real(u_new_composed)) \
-            * np.exp( 1j * np.imag(u_new_composed) )
+        u_new_abs = fu_interp_abs(x_new, y_new)
+        u_new_angl = fu_interp_angl(x_new, y_new)
+
+        u_new = np.abs(u_new_abs) * np.exp( 1j * u_new_angl )
+
         return u_new
 
 
