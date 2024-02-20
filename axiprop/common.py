@@ -10,7 +10,8 @@ This file contains common classed of axiprop:
 """
 import numpy as np
 from scipy.special import jn_zeros
-from scipy.interpolate import interp1d, RectBivariateSpline
+#from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy.interpolate import RegularGridInterpolator
 import os
 
 try:
@@ -233,22 +234,15 @@ class CommonTools:
         return x, y, r, r2
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
-        interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
-                                 fill_value='extrapolate',
-                                 kind='cubic',
-                                 assume_sorted=True,
-                                 bounds_error=False )
 
-        interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
-                                  fill_value='extrapolate',
-                                  kind='cubic',
-                                  assume_sorted=True,
-                                  bounds_error=False )
+        u_composed = np.abs(u_loc) + 1.0j * np.unwrap(np.angle(u_loc))
 
-        u_slice_abs = interp_fu_abs(r_new)
-        u_slice_angl = interp_fu_angl(r_new)
+        u_slice_composed = np.interp(
+            r_new, r_loc, u_composed,
+            left=None, right=0)
 
-        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
+        u_slice_new = np.abs(np.real(u_slice_composed)) \
+            * np.exp( 1j * np.imag(u_slice_composed) )
         u_slice_new *= (r_new <= r_loc.max() )
 
         return u_slice_new
@@ -265,19 +259,20 @@ class CommonTools:
             if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
                 return u_loc
 
-        interp_fu_abs = RectBivariateSpline(
-            x_loc, y_loc, np.abs(u_loc)
+        u_composed = np.abs(u_loc) + 1.0j * unwrap2d(np.angle(u_loc))
+
+        fu_interp = RegularGridInterpolator(
+            (x_loc, y_loc), u_composed,
+            bounds_error=False,
+            method='linear',
+            fill_value=0.0
         )
 
-        interp_fu_angl = RectBivariateSpline(
-            x_loc, y_loc, unwrap2d(np.angle(u_loc))
-        )
+        u_new_composed = fu_interp((x_new, y_new))
 
-        u_slice_abs = interp_fu_abs(x_new, y_new)
-        u_slice_angl = interp_fu_angl(x_new, y_new)
-
-        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
-        return u_slice_new
+        u_new = np.abs(np.real(u_new_composed)) \
+            * np.exp( 1j * np.imag(u_new_composed) )
+        return u_new
 
 
 class PropagatorExtras:
