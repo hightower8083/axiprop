@@ -11,7 +11,7 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn_zeros
 from scipy.interpolate import RectBivariateSpline
-from scipy.interpolate import PchipInterpolator
+from scipy.interpolate import Akima1DInterpolator
 import os
 
 try:
@@ -235,18 +235,27 @@ class CommonTools:
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
 
-        fu_new_abs = PchipInterpolator(
-            r_loc, np.abs(u_loc),
-            extrapolate=True
+        u_abs = np.abs(u_loc)
+        u_angl = np.unwrap(np.angle(u_loc))
+
+        boundary_lo = (r_new < r_loc.min())
+        boundary_hi = (r_new > r_loc.max())
+
+        fu_new_abs = Akima1DInterpolator(
+            r_loc, u_abs
         )
 
-        fu_new_angl = PchipInterpolator(
-            r_loc, np.unwrap(np.angle(u_loc)),
-            extrapolate=True
+        fu_new_angl = Akima1DInterpolator(
+            r_loc, u_angl,
         )
 
         u_new_abs = fu_new_abs(r_new)
         u_new_angl = fu_new_angl(r_new)
+
+        u_new_abs[boundary_lo] = u_abs[0]
+        u_new_angl[boundary_lo] = u_angl[0]
+        u_new_abs[boundary_hi] = 0.0
+        u_new_angl[boundary_hi] = u_angl[-1]
 
         u_new = np.abs(u_new_abs) * np.exp( 1j * u_new_angl )
         u_new *= (r_new <= r_loc.max() )
