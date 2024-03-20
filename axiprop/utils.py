@@ -8,8 +8,7 @@ This file contains utility methods for Axiprop tool
 """
 import numpy as np
 from scipy.constants import c
-from scipy.interpolate import interp1d
-
+from scipy.interpolate import Akima1DInterpolator
 from axiprop.containers import ScalarFieldEnvelope
 
 # try import numba and make dummy methods if cannot
@@ -25,48 +24,43 @@ except Exception:
             return func(*args, **kw_args)
         return func_wrp
 
-def refine1d(A, refine_ord):
+def refine1d(A, refine_ord, kind='linear'):
+    if A.dtype not in (np.double, np.complex128):
+        print("Data type must be `np.double` or `np.complex128`")
+        return None
+    if len(A.shape) != 1:
+        print("Data must be 1D array")
+        return None
+
     refine_ord = int(refine_ord)
     Nx = A.size
     x = np.arange(Nx, dtype=np.double)
     x_new = np.linspace(x.min(), x.max(), refine_ord * (Nx-1) + 1 )
 
-    if A.dtype == np.double:
-        interp_fu = interp1d(x, A, assume_sorted=True)
-        A_new = interp_fu(x_new)
-    elif A.dtype == np.complex128:
-        interp_fu_abs = interp1d(x, np.abs(A), assume_sorted=True)
-        slice_abs = interp_fu_abs(x_new)
-
-        interp_fu_angl = interp1d(x, np.unwrap(np.angle(A)), assume_sorted=True)
-        slice_angl = interp_fu_angl(x_new)
-
-        A_new = slice_abs * np.exp(1j * slice_angl)
-    else:
-        print("Data type must be `np.double` or `np.complex128`")
-        return None
+    if kind is 'linear':
+        if A.dtype == np.double:
+            A_new = np.interp(x_new, x, A)
+        elif A.dtype == np.complex128:
+            slice_abs = np.interp( x_new, x, np.abs(A) )
+            slice_angl = np.interp( x_new, x, np.unwrap(np.angle(A)) )
+            A_new = slice_abs * np.exp(1j * slice_angl)
+    elif kind is 'cubic':
+        if A.dtype == np.double:
+            A_new = Akima1DInterpolator(x, A)(x_new)
+        elif A.dtype == np.complex128:
+            slice_abs = Akima1DInterpolator(x, np.abs(A))(x_new)
+            slice_angl = Akima1DInterpolator(x, np.unwrap(np.angle(A)))(x_new)
+            A_new = slice_abs * np.exp(1j * slice_angl)
 
     return A_new
 
-def refine1d_TR(A, refine_ord):
-    refine_ord = int(refine_ord)
-    Nx = A.shape[0]
+def refine1d_TR(A, refine_ord, kind='linear'):
+    Nt, Nr = A.shape
+    Nt_new = refine_ord * (Nt-1) + 1
+    A_new = np.zeros((Nt_new, Nr), dtype=A.dtype)
 
-    t = np.arange(Nx, dtype=np.double)
-    t_new = np.linspace(t.min(), t.max(), refine_ord * (Nx-1) + 1)
-
-    A_new = np.zeros((t_new.size, A.shape[1]), dtype=A.dtype)
-
-    for ir in range(A.shape[1]):
-        interp_fu_abs = interp1d(t, np.abs(A[:, ir]), assume_sorted=True)
-        slice_abs = interp_fu_abs(t_new)
-
-        interp_fu_angl = interp1d( t, np.unwrap(np.angle(A[:, ir])),
-                                   assume_sorted=True )
-        slice_angl = interp_fu_angl(t_new)
-
-        A_new[:, ir] = slice_abs * np.exp(1j * slice_angl)
-
+    for ir in range(Nr):
+        A_new[:, ir] = refine1d(A[:, ir], refine_ord=refine_ord, kind=kind)
     return A_new
 
 def init_fresnel_rt( dz, r_axis, kz_axis, r_axis_new, **prop_args):
