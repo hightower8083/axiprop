@@ -10,7 +10,8 @@ This file contains common classed of axiprop:
 """
 import numpy as np
 from scipy.special import jn_zeros
-from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import Akima1DInterpolator
 import os
 
 try:
@@ -233,25 +234,33 @@ class CommonTools:
         return x, y, r, r2
 
     def gather_on_r_new( self, u_loc, r_loc, r_new ):
-        interp_fu_abs = interp1d(r_loc, np.abs(u_loc),
-                                 fill_value='extrapolate',
-                                 kind='cubic',
-                                 assume_sorted=True,
-                                 bounds_error=False )
 
-        interp_fu_angl = interp1d(r_loc, np.unwrap(np.angle(u_loc)),
-                                  fill_value='extrapolate',
-                                  kind='cubic',
-                                  assume_sorted=True,
-                                  bounds_error=False )
+        u_abs = np.abs(u_loc)
+        u_angl = np.unwrap(np.angle(u_loc))
 
-        u_slice_abs = interp_fu_abs(r_new)
-        u_slice_angl = interp_fu_angl(r_new)
+        boundary_lo = (r_new < r_loc.min())
+        boundary_hi = (r_new > r_loc.max())
 
-        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
-        u_slice_new *= (r_new <= r_loc.max() )
+        fu_new_abs = Akima1DInterpolator(
+            r_loc, u_abs
+        )
 
-        return u_slice_new
+        fu_new_angl = Akima1DInterpolator(
+            r_loc, u_angl,
+        )
+
+        u_new_abs = fu_new_abs(r_new)
+        u_new_angl = fu_new_angl(r_new)
+
+        u_new_abs[boundary_lo] = u_abs[0]
+        u_new_angl[boundary_lo] = u_angl[0]
+        u_new_abs[boundary_hi] = 0.0
+        u_new_angl[boundary_hi] = u_angl[-1]
+
+        u_new = np.abs(u_new_abs) * np.exp( 1j * u_new_angl )
+        u_new *= (r_new <= r_loc.max() )
+
+        return u_new
 
     def gather_on_xy_new( self, u_loc, r_loc, r_new ):
 
@@ -265,19 +274,22 @@ class CommonTools:
             if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
                 return u_loc
 
-        interp_fu_abs = RectBivariateSpline(
-            x_loc, y_loc, np.abs(u_loc)
+        fu_interp_abs = RectBivariateSpline(
+            x_loc, y_loc, np.abs(u_loc),
+            kx=3, ky=3,
         )
 
-        interp_fu_angl = RectBivariateSpline(
-            x_loc, y_loc, unwrap2d(np.angle(u_loc))
+        fu_interp_angl = RectBivariateSpline(
+            x_loc, y_loc, unwrap2d(np.angle(u_loc)),
+            kx=3, ky=3,
         )
 
-        u_slice_abs = interp_fu_abs(x_new, y_new)
-        u_slice_angl = interp_fu_angl(x_new, y_new)
+        u_new_abs = fu_interp_abs(x_new, y_new)
+        u_new_angl = fu_interp_angl(x_new, y_new)
 
-        u_slice_new = u_slice_abs * np.exp( 1j * u_slice_angl )
-        return u_slice_new
+        u_new = np.abs(u_new_abs) * np.exp( 1j * u_new_angl )
+
+        return u_new
 
 
 class PropagatorExtras:
