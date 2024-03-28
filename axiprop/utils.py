@@ -174,7 +174,10 @@ def mirror_parabolic(f0, kz, r):
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 
-def export_from_lasy(laser):
+def import_from_lasy(laser):
+    r"""
+    Extract field from `lasy` object and import it to a `container` object or list
+    """
     time_axis_indx = -1
     omega0 = laser.profile.omega0
     t_axis = laser.grid.axes[time_axis_indx]
@@ -193,3 +196,40 @@ def export_from_lasy(laser):
         )
 
     return Container
+
+def export_to_lasy_rt(Container, polarization=(1,0)):
+    r"""
+    Export field from the `container` to the `lasy` object
+    """
+    from lasy.laser import Laser
+    from lasy.profiles import CombinedLongitudinalTransverseProfile
+    from lasy.profiles.longitudinal.longitudinal_profile import LongitudinalProfile
+    from lasy.profiles.transverse.transverse_profile import TransverseProfile
+
+    dimensions = 'rt'
+    wavelength = 2 * np.pi * c / Container.omega0
+
+    rmin = Container.r.min()
+    rmax = Container.r.max()
+    tmin = Container.t.min()
+    tmax = Container.t.max()
+
+    lo = ( Container.r.min(), Container.t.min() )
+    hi = ( Container.r.max(), Container.t.max() )
+    num_points = ( Container.r.size, Container.t.size )
+
+    empty_longitudinal_profile = LongitudinalProfile(wavelength=wavelength)
+    empty_transverse_profile = TransverseProfile()
+
+    empty_profile = CombinedLongitudinalTransverseProfile(
+        wavelength=wavelength,
+        pol=polarization,
+        laser_energy=0.0,
+        long_profile=empty_longitudinal_profile,
+        trans_profile=empty_transverse_profile,
+    )
+
+    laser = Laser(dimensions, lo, hi, num_points, empty_profile)
+    laser.grid.field[:] = Container.Field.T
+
+    return laser
