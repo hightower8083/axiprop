@@ -192,35 +192,27 @@ def import_from_lasy(laser):
             )
     else:
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-            np.transpose(laser.grid.field).copy()
+            np.moveaxis(laser.grid.field, 0, -1).copy()
         )
 
     return Container
 
-def export_to_lasy_rt(Container, polarization=(1,0)):
+def export_to_lasy(Container, polarization=(1,0), dimensions='rt'):
     r"""
     Export field from the `container` to the `lasy` object
     """
-    from lasy.laser import Laser
-    from lasy.profiles import CombinedLongitudinalTransverseProfile
-    from lasy.profiles.longitudinal.longitudinal_profile import LongitudinalProfile
-    from lasy.profiles.transverse.transverse_profile import TransverseProfile
+    try:
+        from lasy.laser import Laser
+        from lasy.profiles import CombinedLongitudinalTransverseProfile
+        from lasy.profiles.longitudinal.longitudinal_profile import LongitudinalProfile
+        from lasy.profiles.transverse.transverse_profile import TransverseProfile
+    except Exception:
+        print ( "Error: `lasy` is not installed" )
+        return None
 
-    dimensions = 'rt'
     wavelength = 2 * np.pi * c / Container.omega0
-
-    rmin = Container.r.min()
-    rmax = Container.r.max()
-    tmin = Container.t.min()
-    tmax = Container.t.max()
-
-    lo = ( Container.r.min(), Container.t.min() )
-    hi = ( Container.r.max(), Container.t.max() )
-    num_points = ( Container.r.size, Container.t.size )
-
     empty_longitudinal_profile = LongitudinalProfile(wavelength=wavelength)
     empty_transverse_profile = TransverseProfile()
-
     empty_profile = CombinedLongitudinalTransverseProfile(
         wavelength=wavelength,
         pol=polarization,
@@ -229,7 +221,16 @@ def export_to_lasy_rt(Container, polarization=(1,0)):
         trans_profile=empty_transverse_profile,
     )
 
+    if dimensions == 'rt':
+        lo = ( Container.r.min(), Container.t.min() )
+        hi = ( Container.r.max(), Container.t.max() )
+        num_points = ( Container.r.size, Container.t.size )
+    elif dimensions == 'xyt':
+        lo = ( Container.x.min(), Container.y.min(), Container.t.min() )
+        hi = ( Container.x.min(), Container.y.min(), Container.t.max() )
+        num_points = ( Container.x.size, Container.y.size, Container.t.size )
+
     laser = Laser(dimensions, lo, hi, num_points, empty_profile)
-    laser.grid.field[:] = Container.Field.T
+    laser.grid.field[:] = np.moveaxis(Container.Field, 0, -1)
 
     return laser
