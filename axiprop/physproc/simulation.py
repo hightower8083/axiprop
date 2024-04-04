@@ -1,12 +1,14 @@
 import numpy as np
 from scipy.constants import c
 from tqdm.auto import tqdm
+import h5py, os
+
 from ..containers import ScalarFieldEnvelope, apply_boundary_r
 from ..utils import refine1d
 
 class Simulation:
     def __init__(self, prop, t_axis, k0, z_0,
-                 diag_fields=('E_t_env', 'Energy'),
+                 diag_fields=('all',),
                  n_dump_current=0,
                  n_dump_field=0,
                  open_boundaries_r=False,
@@ -90,6 +92,9 @@ class Simulation:
             err_max=1e-2, growth_rate=None):
 
         physprocs = self.physprocs
+        if 'all' in self.diags.keys() and 'diags' not in os.listdir('./'):
+            os.mkdir('diags')
+
         for diag_str in ['n_e', 'T_e', 'Xi']:
             for i_physproc, physproc in enumerate(physprocs):
                 self.diags[ diag_str + str(i_physproc) ] = []
@@ -104,6 +109,7 @@ class Simulation:
 
         z_diag = np.linspace(self.z_0, self.z_0 + Lz, N_diags)
         do_diag_next = False
+        i_diag = 0
 
         # simulation loop
         if self.verbose:
@@ -112,7 +118,8 @@ class Simulation:
         while (self.z_loc <= self.z_0 + Lz) :
             # record diagnostics data
             if do_diag_next:
-                self._record_diags(En_ts, physprocs)
+                self._record_diags(En_ts, physprocs, i_diag)
+                i_diag += 1
                 do_diag_next = False
 
             # simulation step
@@ -222,7 +229,7 @@ class Simulation:
         field = field.import_field_ft(E_ft, transform=False)
         self.dt_shift = field.dt_to_center - self.z_loc/c
 
-    def _record_diags(self, E_fb, physprocs):
+    def _record_diags(self, E_fb, physprocs, i_diag):
         self.diags['z_axis'].append(self.z_loc)
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
@@ -233,7 +240,11 @@ class Simulation:
         E_obj = ScalarFieldEnvelope(*self.EnvArgs)
         E_obj.t += self.dt_shift
         E_obj.t_loc += self.dt_shift
-        E_obj = E_obj.import_field_ft( E_ft, r_axis=self.prop.r_new )
+        E_obj = E_obj.import_field_ft( E_ft, r_axis=self.prop.r_new, transform=False )
+        E_obj.z_loc = self.z_loc
+
+        if 'all' in self.diags.keys():
+            E_obj.save_to_file(f'diags/container_{str(i_diag).zfill(5)}.h5')
 
         for i_physproc, physproc in enumerate(physprocs):
             i_physproc_str = str(i_physproc)
@@ -257,10 +268,11 @@ class Simulation:
             self.diags['E_ft_onax'].append(E_obj.Field_ft[:, 0])
 
         if 'E_t_env' in self.diags.keys():
+            E_obj.frequency_to_time()
             self.diags['E_t_env'].append(E_obj.Field)
 
         if 'E_t_env_onax' in self.diags.keys():
-            self.diags['E_t_env_onax'].append(E_obj.Field[:, 0])
+            self.diags['E_t_env_onax'].append(E_obj.get_temporal_slice())
 
         if 'E_t_onax' in self.diags.keys():
             t_axis_refine = refine1d(self.t_axis, self.refine_ord).real
@@ -323,3 +335,13 @@ class Simulation:
 
         self.errors = np.asarray(self.errors)
         self.z_axis_err = np.asarray(self.z_axis_err)
+
+    def diags_to_file(self, file_name='axiprop_diags.h5'):
+        self.diags_to_numpy()
+        with h5py.File('various_diags.h5', mode='w') as fl:
+            for diag_str in self.diags.keys():
+                fl[diag_str] = self.diags[diag_str]
+            fl['errors'] = self.errors
+            fl['_axis_err'] = self.z_axis_err
+
+
