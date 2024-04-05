@@ -191,7 +191,6 @@ class Simulation:
             k_tot = ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6
             k_lower = k2
 
-
         val_intgral = 0.5 * bcknd.sum(
             bcknd.abs(k_tot) + bcknd.abs(k_lower)
         )

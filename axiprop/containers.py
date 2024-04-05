@@ -523,7 +523,6 @@ class ScalarFieldEnvelope:
             attr not in attr_exclude for attr in attr_select
         ]]
 
-
         attr_select = attr_select[[
             getattr(self, attr).__class__ is not MethodType for attr in attr_select
         ]]
