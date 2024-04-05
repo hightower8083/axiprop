@@ -9,7 +9,9 @@ This file contains container classes for axiprop:
 import numpy as np
 from scipy.constants import c, e, m_e, epsilon_0
 from scipy.integrate import trapezoid
+import h5py
 from warnings import warn
+from types import MethodType
 
 def apply_boundary_r(A, dump_mask):
     """
@@ -62,7 +64,9 @@ class ScalarFieldEnvelope:
     A class to initialize and transform the optical field envelope
     between temporal and frequency domains.
     """
-    def __init__(self, k0, t_axis, n_dump=0, dtype=np.complex128 ):
+    def __init__(
+        self, k0=None, t_axis=None, n_dump=0, dtype=np.complex128, file_name=None
+    ):
         """
         Initialize the container for the field.
 
@@ -78,24 +82,34 @@ class ScalarFieldEnvelope:
             Number of cells to be used for attenuating boundaries
         """
         self.dtype = dtype
-        self.k0 = k0
-        self.omega0 = k0 * c
 
-        self.t = t_axis.copy()
-        self.dt = t_axis[1] - t_axis[0]
-        self.cdt = c * self.dt
-        self.Nt = self.t.size
-        self.t_loc = self.t[0]
+        if file_name is not None:
+            with h5py.File(file_name, mode='r') as fl:
+                for attr in fl.keys():
+                    setattr( self, attr, fl[attr][()] )
 
-        self.k_freq_base = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
-        self.k_freq = self.k_freq_base + k0
+        elif k0 is not None and t_axis is not None:
+            self.k0 = k0
+            self.omega0 = k0 * c
 
-        self.Nk_freq = self.k_freq.size
-        self.omega = self.k_freq * c
+            self.t = t_axis.copy()
+            self.dt = t_axis[1] - t_axis[0]
+            self.cdt = c * self.dt
+            self.Nt = self.t.size
+            self.t_loc = self.t[0]
 
-        self.n_dump = n_dump
-        r_dump = np.linspace(0, 1, n_dump)
-        self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+            self.k_freq_base = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
+            self.k_freq = self.k_freq_base + k0
+
+            self.Nk_freq = self.k_freq.size
+            self.omega = self.k_freq * c
+
+            self.n_dump = n_dump
+            r_dump = np.linspace(0, 1, n_dump)
+            self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+        else:
+            print ('Either `k0` and `t_axis` or `file_name` should be provided')
+
 
     def make_gaussian_pulse(self, r_axis, tau, w0, a0=None, Energy=None,
                             t0=0.0, phi0=0.0, n_ord=2,
@@ -493,8 +507,32 @@ class ScalarFieldEnvelope:
 
         return Field
 
+    def save_to_file(self, file_name='axiprop_container.h5'):
+        attr_select = np.asarray(self.__dir__() )
 
-class ScalarField:
+        attr_select = attr_select[[
+            '__' not in attr for attr in attr_select
+        ]]
+
+        attr_exclude = [
+            'dtype', 'Energy', 'Energy_ft', 'w0', 'w0_ft',
+            'tau', 'dt_to_center', 'dt_to_peak'
+        ]
+
+        attr_select = attr_select[[
+            attr not in attr_exclude for attr in attr_select
+        ]]
+
+        attr_select = attr_select[[
+            getattr(self, attr).__class__ is not MethodType for attr in attr_select
+        ]]
+
+        with h5py.File(file_name, mode='w') as fl:
+            for attr in attr_select:
+                fl[attr] = getattr(self, attr)
+
+
+class ScalarField(ScalarFieldEnvelope):
     """
     A class to initialize and transform the optical field between temporal
     and frequency domains.
