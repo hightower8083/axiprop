@@ -532,7 +532,7 @@ class ScalarFieldEnvelope:
                 fl[attr] = getattr(self, attr)
 
 
-class ScalarField:
+class ScalarField(ScalarFieldEnvelope):
     """
     A class to initialize and transform the optical field between temporal
     and frequency domains.
