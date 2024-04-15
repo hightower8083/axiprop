@@ -3,11 +3,12 @@ from scipy.constants import c
 from tqdm.auto import tqdm
 import h5py, os
 
-from ..containers import ScalarFieldEnvelope, apply_boundary_r
+from ..containers import ScalarFieldEnvelope
+from ..containers import apply_boundary_r
 from ..utils import refine1d
 from .diags import Diagnostics
 
-class SimulationBase(Diagnostics):
+class SolverBase(Diagnostics):
     def __init__(self,
                  prop, t_axis, k0, z_0,
                  physprocs=[],
@@ -200,7 +201,7 @@ class SimulationBase(Diagnostics):
               f'dz = {dz*1e6:.3f} um; iterations {iterations:d}', end='\r', flush=True)
 
 
-class SimulationExplicit(SimulationBase):
+class SolverExplicitBase(SolverBase):
 
     def _step(self, En_ts, dz, physprocs):
         pass
@@ -225,7 +226,7 @@ class SimulationExplicit(SimulationBase):
         return dz
 
 
-class SimulationExplicitMulti(SimulationExplicit):
+class SolverExplicitMulti(SolverExplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
 
@@ -308,7 +309,7 @@ class SimulationExplicitMulti(SimulationExplicit):
         return dz
 
 
-class SimulationRK4(SimulationExplicit):
+class SolverRK4(SolverExplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
 
@@ -356,7 +357,7 @@ class SimulationRK4(SimulationExplicit):
         return En_ts_next, err, 0
 
 
-class SimulationImplicit(SimulationBase):
+class SolverImplicitBase(SolverBase):
     def _step(self, En_ts, dz, physprocs):
         pass
 
@@ -364,7 +365,8 @@ class SimulationImplicit(SimulationBase):
         return dz0
 
 
-class SimulationAM1(SimulationImplicit):
+class SolverAM1(SolverImplicitBase):
+
     def _step(self, En_ts, dz, physprocs):
 
         bcknd = self.prop.bcknd
@@ -399,7 +401,7 @@ class SimulationAM1(SimulationImplicit):
         return En_ts_next, err, iterations
 
 
-class SimulationAM2(SimulationImplicit):
+class SolverAM2(SolverImplicitBase):
 
     def _step(self, En_ts, dz, physprocs, propagate_coeff=False):
 
@@ -444,9 +446,9 @@ class SimulationAM2(SimulationImplicit):
 
         return En_ts_next, err, iterations
 
-class SimulationAM3(SimulationImplicit):
+class SolverAM3(SolverImplicitBase):
 
-    _step0 = SimulationAM2._step
+    _step0 = SolverAM2._step
 
     def _step(self, En_ts, dz, physprocs):
 
