@@ -5,33 +5,62 @@ import h5py, os
 
 from ..containers import ScalarFieldEnvelope, apply_boundary_r
 from ..utils import refine1d
+from .diags import Diagnostics
 
-class SimulationBase:
-    def __init__(self, prop, t_axis, k0, z_0,
+class SimulationBase(Diagnostics):
+    def __init__(self,
+                 prop, t_axis, k0, z_0,
+                 physprocs=[],
                  diag_fields=('all',),
-                 err_max=1e-2,
+                 method='RK4',
+                 adjust_dz=True,
+                 err_max=3e-3,
+                 iterations_max=16,
+                 dz_min=2e-7,
+                 growth_rate=None,
+                 max_wavelength=4e-6,
+                 pulse_centering=False,
+                 open_boundaries_r=False,
                  n_dump_current=0,
                  n_dump_field=0,
-                 open_boundaries_r=False,
-                 physprocs=[],
-                 max_wavelength=4e-6,
                  refine_ord=1,
-                 pulse_centering=False,
-                 verbose=True):
+                 verbose=True,
+    ):
 
         self.prop = prop
-        self.physprocs = physprocs
-        self.err_max = err_max
-
-        self.k0 = k0
-        self.omega0 = k0 * c
         self.t_axis = t_axis.copy()
-        self.EnvArgs = (self.k0, self.t_axis, n_dump_current)
+        self.k0 = k0
         self.z_0 = z_0
-        self.z_loc = z_0
-        self.dt_shift = 0.0
+
+        self.physprocs = physprocs
+        self.method = method
+        self.adjust_dz = adjust_dz
+        self.dz_min = dz_min
+        self.err_max = err_max
+        self.iterations_max = iterations_max
+        self.dz_min = dz_min
+        self.growth_rate = growth_rate
+
         self.open_boundaries_r = open_boundaries_r
         self.pulse_centering = pulse_centering
+
+        self.refine_ord = refine_ord
+        self.verbose = verbose
+
+        self.diags = {}
+        diags_default = ('z_axis',)
+
+        if self.pulse_centering:
+            diags_default += ('dt_shift',)
+
+        for diag_str in tuple(diag_fields) + diags_default:
+            self.diags[diag_str] = []
+
+        self.omega0 = k0 * c
+
+        self.EnvArgs = (self.k0, self.t_axis, n_dump_current)
+        self.z_loc = z_0
+        self.dt_shift = 0.0
 
         k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
@@ -61,9 +90,11 @@ class SimulationBase:
 
         if open_boundaries_r:
             self.dump_mask = np.zeros(n_dump_field)
-            r_dump = np.linspace(0, 1, n_dump_field//2)
-            self.dump_mask[:n_dump_field//2] = \
-                ( 1 - np.exp(-(2 * r_dump)**6) )[::-1]
+            r_dump = np.linspace(0, 1, 3*n_dump_field//4)
+
+            self.dump_mask[:r_dump.size] = \
+                ( 1 - np.exp(-(3 * r_dump)**2) )[::-1]
+
             self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
         if not hasattr(prop, 'omega') :
@@ -78,42 +109,36 @@ class SimulationBase:
             prop.omega = prop.bcknd.to_device(prop.omega)
             # prop.omega_inv = prop.bcknd.to_device(prop.omega_inv) # add later
 
-        self.diags = {}
-        diags_default = ('z_axis',)
-        if self.pulse_centering:
-            diags_default += ('dt_shift',)
-
-        for diag_str in tuple(diag_fields) + diags_default:
-            self.diags[diag_str] = []
-        self.refine_ord = refine_ord
-
-        self.verbose = verbose
-
     def run(self, E0, Lz, dz0, N_diags):
 
         physprocs = self.physprocs
+        dz = dz0
+
+        z_diag = np.linspace(self.z_0, self.z_0 + Lz, N_diags)
+
+        # lists to be filled numerical error data
+        self.z_axis_err = []
+        self.errors = []
+        self.iterations = []
+
+        # create diag folder (if needed)
         if 'all' in self.diags.keys() and 'diags' not in os.listdir('./'):
             os.mkdir('diags')
 
+        # initalize plasma OFI diags (if needed)
         for diag_str in ['n_e', 'T_e', 'Xi']:
             for i_physproc, physproc in enumerate(physprocs):
                 self.diags[ diag_str + str(i_physproc) ] = []
 
         # field in Fourier-Bessel space (updated by simulation)
         En_ts = self.prop.perform_transfer_TST(E0, stepping=False)
-        dz = dz0
-
-        # lists to be filled numerical error data
-        self.z_axis_err = []
-        self.errors = []
-
-        z_diag = np.linspace(self.z_0, self.z_0 + Lz, N_diags)
-        do_diag_next = False
-        i_diag = 0
 
         # simulation loop
         if self.verbose:
             self._pbar_init(Lz)
+
+        do_diag_next = False
+        i_diag = 0
 
         while (self.z_loc <= self.z_0 + Lz) :
             # record diagnostics data
@@ -121,6 +146,9 @@ class SimulationBase:
                 self._record_diags(En_ts, physprocs, i_diag)
                 i_diag += 1
                 do_diag_next = False
+                if self.z_loc == self.z_0 + Lz:
+                    print ('End of simulation')
+                    return
 
             # simulation step
             En_ts, err, iterations = self._step(
@@ -128,121 +156,36 @@ class SimulationBase:
                 physprocs
             )
 
+            # field filtering
+            if self.DC_filter is not None:
+                En_ts *= self.DC_filter
+
+            if self.open_boundaries_r:
+                En_r_space = self.prop.perform_iTST(En_ts)
+                En_r_space = apply_boundary_r(En_r_space, self.dump_mask)
+                En_ts = self.prop.perform_TST(En_r_space)
+
+            # simulation time advance
+            self.t_axis += dz / c
+            self.z_loc += dz
+
             # record error data
             self.errors.append(err)
+            self.iterations.append(iterations)
             self.z_axis_err.append(self.z_loc)
+
+            if self.adjust_dz:
+                dz = self._opt_dz( dz, dz0, err, iterations )
 
             # adjust dz to diags
             if self.z_loc <= z_diag[-1] - dz:
                 dz, do_diag_next = self._match_dz_to_diags( dz, z_diag)
             else:
-                dz = dz0
-            dz = dz0
-
-            # adjust dz to the error for explicit methods
-            if self.adjust_dz:
-                if err>0:
-                    dz = self._opt_dz( dz, err )
-                else:
-                    dz = dz0
+                dz = z_diag[-1] - self.z_loc
+                do_diag_next = True
 
             if self.verbose:
                self._pbar_update(dz,iterations)
-
-        print ('End of simulation')
-
-    def _pulse_center(self, E_ft):
-        field = ScalarFieldEnvelope(*self.EnvArgs)
-        field.t += self.dt_shift
-        field.t_loc += self.dt_shift
-        field = field.import_field_ft(E_ft, transform=False)
-        self.dt_shift = field.dt_to_center - self.z_loc/c
-
-    def _record_diags(self, E_fb, physprocs, i_diag):
-        self.diags['z_axis'].append(self.z_loc)
-        E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
-
-        if self.pulse_centering:
-            self._pulse_center(E_ft)
-            self.diags['dt_shift'].append(self.dt_shift)
-
-        E_obj = ScalarFieldEnvelope(*self.EnvArgs)
-        E_obj.t += self.dt_shift
-        E_obj.t_loc += self.dt_shift
-        E_obj = E_obj.import_field_ft( E_ft, r_axis=self.prop.r_new, transform=False )
-        E_obj.z_loc = self.z_loc
-
-        if 'all' in self.diags.keys():
-            E_obj.save_to_file(f'diags/container_{str(i_diag).zfill(5)}.h5')
-
-        for i_physproc, physproc in enumerate(physprocs):
-            i_physproc_str = str(i_physproc)
-
-            if hasattr(physproc, 'follow_process'):
-                physproc.get_data(E_obj)
-
-            if hasattr(physproc, 'n_e'):
-                self.diags['n_e'+i_physproc_str].append(physproc.n_e)
-
-            if hasattr(physproc, 'T_e'):
-                self.diags['T_e'+i_physproc_str].append(physproc.T_e)
-
-            if hasattr(physproc, 'Xi'):
-                self.diags['Xi'+i_physproc_str].append(physproc.Xi)
-
-        if 'E_ft' in self.diags.keys():
-            self.diags['E_ft'].append(E_obj.Field_ft)
-
-        if 'E_ft_onax' in self.diags.keys():
-            self.diags['E_ft_onax'].append(E_obj.Field_ft[:, 0])
-
-        if 'E_t_env' in self.diags.keys():
-            E_obj.frequency_to_time()
-            self.diags['E_t_env'].append(E_obj.Field)
-
-        if 'E_t_env_onax' in self.diags.keys():
-            self.diags['E_t_env_onax'].append(E_obj.get_temporal_slice())
-
-        if 'E_t_onax' in self.diags.keys():
-            t_axis_refine = refine1d(self.t_axis, self.refine_ord).real
-            phs = np.exp(-1j * t_axis_refine * c * self.k0)
-            self.diags['E_t_onax'].append(
-                np.real(refine1d(E_obj.Field[:,0], self.refine_ord) * phs )
-            )
-
-        if 'Energy_ft' in self.diags.keys():
-            self.diags['Energy_ft'].append(E_obj.Energy_ft)
-
-        if 'Energy' in self.diags.keys():
-            self.diags['Energy'].append(E_obj.Energy)
-
-    def _opt_dz( self, dz, err):
-        if self.growth_rate is not None:
-            if err<self.err_max:
-                dz *= self.growth_rate
-            else:
-                ErrFact = self.err_max / err
-                dz *= 0.95 * ErrFact**0.5
-        else:
-            if err>0:
-                ErrFact = self.err_max / err
-                dz *= 0.95 * ErrFact**0.5
-
-        if dz<self.dz_min:
-            dz = self.dz_min
-
-        return dz
-
-    def _match_dz_to_diags( self, dz, z_diags):
-        dz_to_next_diag = z_diags[z_diags>self.z_loc][0] - self.z_loc
-
-        if dz_to_next_diag < dz:
-            dz = dz_to_next_diag
-            do_diag_next = True
-        else:
-            do_diag_next = False
-
-        return dz, do_diag_next
 
     def _pbar_init(self, Lz):
         tqdm_bar_format = '{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
@@ -256,55 +199,33 @@ class SimulationBase:
         print(f'distance left = {(self.z_0+self.Lz-self.z_loc)*1e3:.3f} mm; '+
               f'dz = {dz*1e6:.3f} um; iterations {iterations:d}', end='\r', flush=True)
 
-    def diags_to_numpy(self):
-        for diag_str in self.diags.keys():
-            self.diags[diag_str] = np.asarray(self.diags[diag_str])
-
-        self.errors = np.asarray(self.errors)
-        self.z_axis_err = np.asarray(self.z_axis_err)
-
-    def diags_to_file(self, file_name='axiprop_diags.h5'):
-        self.diags_to_numpy()
-        with h5py.File('various_diags.h5', mode='w') as fl:
-            for diag_str in self.diags.keys():
-                fl[diag_str] = self.diags[diag_str]
-            fl['errors'] = self.errors
-            fl['_axis_err'] = self.z_axis_err
-
 
 class SimulationExplicit(SimulationBase):
-    def __init__(self, prop, t_axis, k0, z_0,
-                 diag_fields=('all',),
-                 err_max=1e-2,
-                 method='RK4',
-                 adjust_dz=True,
-                 dz_min=2e-7,
-                 growth_rate=None,
-                 n_dump_current=0,
-                 n_dump_field=0,
-                 open_boundaries_r=False,
-                 physprocs=[],
-                 max_wavelength=4e-6,
-                 refine_ord=1,
-                 pulse_centering=False,
-                 verbose=True):
 
-        super().__init__(prop, t_axis, k0, z_0,
-                     diag_fields=diag_fields,
-                     err_max=err_max,
-                     n_dump_current=n_dump_current,
-                     n_dump_field=n_dump_field,
-                     open_boundaries_r=open_boundaries_r,
-                     physprocs=physprocs,
-                     max_wavelength=max_wavelength,
-                     refine_ord=refine_ord,
-                     pulse_centering=pulse_centering,
-                     verbose=verbose)
+    def _step(self, En_ts, dz, physprocs):
+        pass
 
-        self.method = method
-        self.adjust_dz = adjust_dz
-        self.dz_min = dz_min
-        self.growth_rate = growth_rate
+    def _opt_dz( self, dz, dz0, err, iterations=None ):
+        if err == 0:
+            return dz0
+
+        if self.growth_rate is not None:
+            if err<self.err_max:
+                dz *= self.growth_rate
+            else:
+                ErrFact = self.err_max / err
+                dz *= 0.95 * ErrFact**0.5
+        else:
+            ErrFact = self.err_max / err
+            dz *= 0.95 * ErrFact**0.5
+
+        if dz<self.dz_min:
+            dz = self.dz_min
+
+        return dz
+
+
+class SimulationExplicitMulti(SimulationExplicit):
 
     def _step(self, En_ts, dz, physprocs):
 
@@ -362,70 +283,102 @@ class SimulationExplicit(SimulationBase):
             err = 0.0
 
         # field advance
-        En_ts += dz * k_tot
+        En_ts_next = En_ts + dz * k_tot
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
-        if self.DC_filter is not None:
-            En_ts *= self.DC_filter
+        return En_ts_next, err, 0
 
-        En_ts = self.prop.step_simple(En_ts, dz)
+    def _opt_dz( self, dz, dz0, err, iterations=None ):
+        if err == 0:
+            return dz0
 
-        if self.open_boundaries_r:
-            En_r_space = self.prop.perform_iTST(En_ts)
-            En_r_space = apply_boundary_r(En_r_space, self.dump_mask)
-            En_ts = self.prop.perform_TST(En_r_space)
+        if self.growth_rate is not None:
+            if err<self.err_max:
+                dz *= self.growth_rate
+            else:
+                ErrFact = self.err_max / err
+                dz *= 0.95 * ErrFact**0.5
+        else:
+            ErrFact = self.err_max / err
+            dz *= 0.95 * ErrFact**0.5
 
-        self.t_axis += dz / c
-        self.z_loc += dz
-        # field advance: end
+        if dz<self.dz_min:
+            dz = self.dz_min
 
-        return En_ts, err, 1
+        return dz
 
 
-class SimulationImplicit(SimulationBase):
-    def __init__(self, prop, t_axis, k0, z_0,
-                 diag_fields=('all',),
-                 err_max=1e-6,
-                 method='BWE',
-                 n_dump_current=0,
-                 n_dump_field=0,
-                 open_boundaries_r=False,
-                 physprocs=[],
-                 max_wavelength=4e-6,
-                 refine_ord=1,
-                 pulse_centering=False,
-                 verbose=True):
-
-        super().__init__(prop, t_axis, k0, z_0,
-                     diag_fields=diag_fields,
-                     err_max=err_max,
-                     n_dump_current=n_dump_current,
-                     n_dump_field=n_dump_field,
-                     open_boundaries_r=open_boundaries_r,
-                     physprocs=physprocs,
-                     max_wavelength=max_wavelength,
-                     refine_ord=refine_ord,
-                     pulse_centering=pulse_centering,
-                     verbose=verbose)
-
-        self.adjust_dz = False
-        self.dz_min = None
-        self.method = method
+class SimulationRK4(SimulationExplicit):
 
     def _step(self, En_ts, dz, physprocs):
 
-        method = self.method
+        bcknd = self.prop.bcknd
+
+        k1 = 0.0
+        for physproc in physprocs:
+            k1 += physproc.get_RHS( En_ts )
+
+        En_pre_ts = En_ts + 0.5 * dz * k1
+
+        k2 = 0.0
+        for physproc in physprocs:
+            k2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+
+        En_pre_ts = En_ts + 0.5 * dz * k2
+
+        k3 = 0.0
+        for physproc in physprocs:
+            k3 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+
+        En_pre_ts = En_ts + dz * k3
+
+        k4 = 0.0
+        for physproc in physprocs:
+            k4 += physproc.get_RHS( En_pre_ts, dz )
+
+        k_tot = ( k1 + 2*k2 + 2*k3 + k4 ) / 6
+        k_lower = k2 #2*k2 - k1
+
+        val_intgral = 0.5 * bcknd.sum(
+            bcknd.abs(k_tot) + bcknd.abs(k_lower)
+        )
+
+        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
+
+        if val_intgral>0:
+            err = err_abs / val_intgral
+        else:
+            err = 0.0
+
+        En_ts_next = En_ts + dz * k_tot
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
+
+        return En_ts_next, err, 0
+
+
+class SimulationImplicit(SimulationBase):
+    def _step(self, En_ts, dz, physprocs):
+        pass
+
+    def _opt_dz(self, dz, dz0, err, iterations):
+        return dz0
+
+
+class SimulationAM1(SimulationImplicit):
+    def _step(self, En_ts, dz, physprocs):
+
         bcknd = self.prop.bcknd
 
         En_ts_prev = En_ts.copy()
         err = 1.0
         iterations = 0
 
-        while err>self.err_max:
-            k0 = 0.0
+        while err>self.err_max and iterations<=self.iterations_max:
+            self.k0 = 0.0
             for physproc in physprocs:
-                k0 += physproc.get_RHS( En_ts_prev, dz )
+                self.k0 += physproc.get_RHS( En_ts_prev, dz )
 
-            En_ts_next = En_ts + dz * k0
+            En_ts_next = En_ts + dz * self.k0
 
             val_intgral = 0.5 * bcknd.sum(
                 bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
@@ -441,21 +394,95 @@ class SimulationImplicit(SimulationBase):
             En_ts_prev = En_ts_next.copy()
             iterations += 1
 
-        # field advance
-        En_ts = En_ts_next.copy()
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
-        if self.DC_filter is not None:
-            En_ts *= self.DC_filter
+        return En_ts_next, err, iterations
 
-        En_ts = self.prop.step_simple(En_ts, dz)
 
-        if self.open_boundaries_r:
-            En_r_space = self.prop.perform_iTST(En_ts)
-            En_r_space = apply_boundary_r(En_r_space, self.dump_mask)
-            En_ts = self.prop.perform_TST(En_r_space)
+class SimulationAM2(SimulationImplicit):
 
-        self.t_axis += dz / c
-        self.z_loc += dz
-        # field advance: end
+    def _step(self, En_ts, dz, physprocs, propagate_coeff=False):
 
-        return En_ts, err, iterations
+        bcknd = self.prop.bcknd
+
+        En_ts_prev = En_ts.copy()
+        err = 1.0
+        iterations = 0
+
+        self.k0 = 0.0
+        for physproc in physprocs:
+            self.k0 += physproc.get_RHS( En_ts_prev )
+
+        En_ts_prev = En_ts + dz * self.k0
+
+        while err>self.err_max and iterations<=self.iterations_max:
+            self.k1 = 0.0
+            for physproc in physprocs:
+                self.k1 += physproc.get_RHS( En_ts_prev, dz )
+
+            En_ts_next = En_ts + 0.5 * dz * ( self.k0 + self.k1 )
+
+            val_intgral = 0.5 * bcknd.sum(
+                bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
+            )
+
+            err_abs = 0.5 * bcknd.sum( bcknd.abs(En_ts_next-En_ts_prev) )
+
+            if val_intgral>0:
+                err = err_abs / val_intgral
+            else:
+                err = 0.0
+
+            En_ts_prev = En_ts_next.copy()
+            iterations += 1
+
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
+
+        if propagate_coeff:
+            self.k0 = self.prop.step_simple(self.k0, dz)
+            self.k1 = self.prop.step_simple(self.k1, dz)
+
+        return En_ts_next, err, iterations
+
+class SimulationAM3(SimulationImplicit):
+
+    _step0 = SimulationAM2._step
+
+    def _step(self, En_ts, dz, physprocs):
+
+        bcknd = self.prop.bcknd
+
+        if not hasattr(self, 'k1'):
+            return self._step0(En_ts, dz, physprocs, propagate_coeff=True)
+
+        En_ts_prev = En_ts.copy()
+        err = 1.0
+        iterations = 0
+
+        while err>self.err_max and iterations<=self.iterations_max:
+
+            self.k2 = 0.0
+            for physproc in physprocs:
+                self.k2 += physproc.get_RHS( En_ts_prev, dz )
+
+            En_ts_next = En_ts + dz * ( 5./12. * self.k2  + 8./12. * self.k1 - 1./12. * self.k0)
+
+            val_intgral = 0.5 * bcknd.sum(
+                bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
+            )
+
+            err_abs = 0.5 * bcknd.sum( bcknd.abs(En_ts_next-En_ts_prev) )
+
+            if val_intgral>0:
+                err = err_abs / val_intgral
+            else:
+                err = 0.0
+
+            En_ts_prev = En_ts_next.copy()
+            iterations += 1
+
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
+        self.k0 = self.prop.step_simple(self.k1, dz)
+        self.k1 = self.prop.step_simple(self.k2, dz)
+
+        return En_ts_next, err, iterations
