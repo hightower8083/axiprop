@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.constants import c
 import h5py, os
+from glob import glob as listdir
 
 from ..containers import ScalarFieldEnvelope, apply_boundary_r
 from ..utils import refine1d
@@ -14,7 +15,8 @@ class Diagnostics:
         field = field.import_field_ft(E_ft, transform=False)
         self.dt_shift = field.dt_to_center - self.z_loc/c
 
-    def _record_diags(self, E_fb, physprocs, i_diag):
+    def _record_diags(self, E_fb, physprocs, i_diag, write_dir):
+        print (f'making record at {self.z_loc}')
         self.diags['z_axis'].append(self.z_loc)
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
@@ -29,7 +31,8 @@ class Diagnostics:
         E_obj.z_loc = self.z_loc
 
         if 'all' in self.diags.keys():
-            E_obj.save_to_file(f'diags/container_{str(i_diag).zfill(5)}.h5')
+            file_path = write_dir + f'/container_{str(i_diag).zfill(5)}.h5'
+            E_obj.save_to_file(file_path)
 
         for i_physproc, physproc in enumerate(physprocs):
             i_physproc_str = str(i_physproc)
@@ -78,6 +81,7 @@ class Diagnostics:
         if dz_to_next_diag < dz:
             dz = dz_to_next_diag
             do_diag_next = True
+            print ( f"next diag {z_diags[z_diags>self.z_loc][0]}, now is {self.z_loc}" )
         else:
             do_diag_next = False
 
@@ -90,10 +94,57 @@ class Diagnostics:
         self.errors = np.asarray(self.errors)
         self.z_axis_err = np.asarray(self.z_axis_err)
 
-    def diags_to_file(self, file_name='axiprop_diags.h5'):
+    def diags_to_file(self, file_name='various_diags.h5'):
         self.diags_to_numpy()
-        with h5py.File('various_diags.h5', mode='w') as fl:
+        with h5py.File(file_name, mode='w') as fl:
             for diag_str in self.diags.keys():
                 fl[diag_str] = self.diags[diag_str]
             fl['errors'] = self.errors
             fl['_axis_err'] = self.z_axis_err
+
+class DiagsAPI:
+
+    def __init__(self, diags_path='./'):
+        self.diags_path = diags_path
+        self.filelist = listdir(self.diags_path + 'container_*.h5')
+        self.filelist.sort()
+        self.N_diags = len(self.filelist)
+
+    def get_various(self):
+        diags = {}
+        with h5py.File(self.diags_path + 'various_diags.h5', mode='r') as fl:
+            for key in fl.keys():
+                diags[key] = fl[key][()]
+        return diags
+
+    def get_envelop_axis(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        field = LaserObject.get_temporal_slice()
+        coord = LaserObject.t.copy()
+        return field, coord
+
+    def get_energy(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        LaserEnergy = LaserObject.Energy_ft
+        return LaserEnergy
+
+    def get_field(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        LaserObject.frequency_to_time()
+        field = LaserObject.Field.copy()
+        axes = LaserObject.t.copy(),  LaserObject.r.copy()
+        return field, axes
+
+    def get_waist(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        val =  LaserObject.w0_ft
+        return val
+
+    def get_tau(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        val =  LaserObject.tau
+        return val
+
+    def get_container(self, i_record=0):
+        LaserObject = ScalarFieldEnvelope(file_name=self.filelist[i_record])
+        return LaserObject
