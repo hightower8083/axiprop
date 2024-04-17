@@ -1,11 +1,9 @@
 import numpy as np
 from scipy.constants import c
 from tqdm.auto import tqdm
-import h5py, os
+import os
 
-from ..containers import ScalarFieldEnvelope
 from ..containers import apply_boundary_r
-from ..utils import refine1d
 from .diags import Diagnostics
 
 
@@ -322,8 +320,6 @@ class SolverExplicitMulti(SolverExplicitBase):
 class SolverEuler(SolverExplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
-        bcknd = self.prop.bcknd
-
         k_tot = 0.0
         for physproc in physprocs:
             k_tot += physproc.get_RHS( En_ts )
@@ -346,7 +342,7 @@ class SolverMP(SolverExplicitBase):
             k1 += physproc.get_RHS( En_ts )
 
         k2 = 0.0
-        En_pre_ts = En_ts + C_k2 * dz * k1
+        En_pre_ts = En_ts + 0.5 * dz * k1
         for physproc in physprocs:
             k2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
 

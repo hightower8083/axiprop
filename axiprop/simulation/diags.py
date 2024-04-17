@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.constants import c
-import h5py, os
+import h5py
 from glob import glob as listdir
 
-from ..containers import ScalarFieldEnvelope, apply_boundary_r
+from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d
 
 class Diagnostics:
