@@ -136,21 +136,12 @@ class SolverBase(Diagnostics):
         if self.verbose:
             self._pbar_init(Lz)
 
-        do_diag_next = False
         i_diag = 0
+        self._record_diags(En_ts, physprocs, i_diag, write_dir)
+        i_diag += 1
+        do_diag_next = False
 
         while (self.z_loc <= self.z_0 + Lz) :
-            # record diagnostics data
-            if do_diag_next:
-                self._record_diags(En_ts, physprocs, i_diag, write_dir)
-                i_diag += 1
-                do_diag_next = False
-                if self.z_loc == self.z_0 + Lz:
-                    self.diags_to_numpy()
-                    self.diags_to_file()
-                    print ('End of simulation')
-                    return
-
             # simulation step
             En_ts, err, iterations = self._step(
                 En_ts, dz,
@@ -187,6 +178,16 @@ class SolverBase(Diagnostics):
 
             if self.verbose:
                self._pbar_update(dz,iterations)
+
+            # record diagnostics data
+            if do_diag_next:
+                self._record_diags(En_ts, physprocs, i_diag, write_dir)
+                i_diag += 1
+                do_diag_next = False
+                if self.z_loc == self.z_0 + Lz:
+                    self.diags_to_file()
+                    print ('End of simulation')
+                    return
 
     def _pbar_init(self, Lz):
         tqdm_bar_format = '{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'

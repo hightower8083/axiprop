@@ -16,7 +16,6 @@ class Diagnostics:
         self.dt_shift = field.dt_to_center - self.z_loc/c
 
     def _record_diags(self, E_fb, physprocs, i_diag, write_dir):
-        print (f'making record at {self.z_loc}')
         self.diags['z_axis'].append(self.z_loc)
         E_ft = self.prop.perform_iTST_transfer(E_fb.copy())
 
@@ -81,7 +80,6 @@ class Diagnostics:
         if dz_to_next_diag < dz:
             dz = dz_to_next_diag
             do_diag_next = True
-            print ( f"next diag {z_diags[z_diags>self.z_loc][0]}, now is {self.z_loc}" )
         else:
             do_diag_next = False
 
@@ -89,7 +87,10 @@ class Diagnostics:
 
     def diags_to_numpy(self):
         for diag_str in self.diags.keys():
-            self.diags[diag_str] = np.asarray(self.diags[diag_str])
+            try:
+                self.diags[diag_str] = np.asarray(self.diags[diag_str])
+            except:
+                continue
 
         self.errors = np.asarray(self.errors)
         self.z_axis_err = np.asarray(self.z_axis_err)
@@ -102,17 +103,17 @@ class Diagnostics:
             fl['errors'] = self.errors
             fl['_axis_err'] = self.z_axis_err
 
-class DiagsAPI:
 
+class DiagsAPI:
     def __init__(self, diags_path='./'):
         self.diags_path = diags_path
         self.filelist = listdir(self.diags_path + 'container_*.h5')
         self.filelist.sort()
         self.N_diags = len(self.filelist)
 
-    def get_various(self):
+    def get_various(self, various_diags_path='./'):
         diags = {}
-        with h5py.File(self.diags_path + 'various_diags.h5', mode='r') as fl:
+        with h5py.File(various_diags_path+'various_diags.h5', mode='r') as fl:
             for key in fl.keys():
                 diags[key] = fl[key][()]
         return diags
