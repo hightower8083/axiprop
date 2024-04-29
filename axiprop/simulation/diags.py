@@ -37,6 +37,8 @@ class Diagnostics:
             i_physproc_str = str(i_physproc)
 
             if hasattr(physproc, 'follow_process'):
+                if not hasattr(E_obj, 'Field'):
+                    E_obj.frequency_to_time()
                 physproc.get_data(E_obj)
 
             if hasattr(physproc, 'n_e'):
@@ -55,13 +57,16 @@ class Diagnostics:
             self.diags['E_ft_onax'].append(E_obj.Field_ft[:, 0])
 
         if 'E_t_env' in self.diags.keys():
-            E_obj.frequency_to_time()
+            if not hasattr(E_obj, 'Field'):
+                E_obj.frequency_to_time()
             self.diags['E_t_env'].append(E_obj.Field)
 
         if 'E_t_env_onax' in self.diags.keys():
             self.diags['E_t_env_onax'].append(E_obj.get_temporal_slice())
 
         if 'E_t_onax' in self.diags.keys():
+            if not hasattr(E_obj, 'Field'):
+                E_obj.frequency_to_time()
             t_axis_refine = refine1d(self.t_axis, self.refine_ord).real
             phs = np.exp(-1j * t_axis_refine * c * self.k0)
             self.diags['E_t_onax'].append(
@@ -72,6 +77,8 @@ class Diagnostics:
             self.diags['Energy_ft'].append(E_obj.Energy_ft)
 
         if 'Energy' in self.diags.keys():
+            if not hasattr(E_obj, 'Field'):
+                E_obj.frequency_to_time()
             self.diags['Energy'].append(E_obj.Energy)
 
     def _match_dz_to_diags( self, dz, z_diags ):
