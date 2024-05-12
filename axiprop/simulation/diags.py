@@ -112,9 +112,9 @@ class Diagnostics:
 
 
 class DiagsAPI:
-    def __init__(self, diags_path='./'):
+    def __init__(self, diags_path='./', prefix='container_'):
         self.diags_path = diags_path
-        self.filelist = listdir(self.diags_path + 'container_*.h5')
+        self.filelist = listdir(self.diags_path + prefix + '*.h5')
         self.filelist.sort()
         self.N_diags = len(self.filelist)
 
