@@ -139,7 +139,7 @@ class SolverBase(Diagnostics):
         i_diag += 1
         do_diag_next = False
 
-        while (self.z_loc <= self.z_0 + Lz) :
+        while (self.z_loc <= self.z_0 + Lz) and self.is_finite(En_ts):
             # simulation step
             En_ts, err, iterations = self._step(
                 En_ts, dz,
@@ -199,6 +199,13 @@ class SolverBase(Diagnostics):
         print(f'distance left = {(self.z_0+self.Lz-self.z_loc)*1e3:.3f} mm; '+
               f'dz = {dz*1e6:.3f} um; iterations {iterations:d}', end='\r', flush=True)
 
+    def is_finite(self, En_ts):
+        infinite_count = np.isnan(En_ts).sum()
+        if infinite_count>0:
+            print ('NaN elements detected. Try to restart simulation.')
+            return False
+        else:
+            return True
 
 class SolverExplicitBase(SolverBase):
 
