@@ -125,7 +125,7 @@ class PlasmaIonization(PlasmaRelativistic):
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
 
-        self.T_e = 0.0
+        self.T_e = np.zeros_like( sim.prop.r_new )
         self.Z_init = Z_init
         self.Zmax = Zmax
         self.dt = sim.t_axis[1] - sim.t_axis[0]
