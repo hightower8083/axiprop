@@ -219,9 +219,9 @@ class ScalarFieldEnvelope:
                 trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
             )
         else:
-            dx = self.x[[0,1]].ptp()
-            dy = self.y[[0,1]].ptp()
-            cdt = c * self.t[[0,1]].ptp()
+            dx = np.ptp( self.x[[0,1]] )
+            dy = np.ptp( self.y[[0,1]] )
+            cdt = c * np.ptp( self.t[[0,1]] )
             Energy = np.pi * epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
 
@@ -239,14 +239,14 @@ class ScalarFieldEnvelope:
             return None
 
         if len(self.Field_ft[0].shape)==1:
-            Energy = np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+            Energy = np.pi * epsilon_0 * c * np.ptp(self.t) * trapezoid(
                 ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
             )
         else:
-            dx = self.x[[0,1]].ptp()
-            dy = self.y[[0,1]].ptp()
+            dx = np.ptp( self.x[[0,1]] )
+            dy = np.ptp( self.y[[0,1]] )
 
-            Energy = np.pi * epsilon_0 * c * self.t.ptp() * \
+            Energy = np.pi * epsilon_0 * c * np.ptp(self.t) * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
 
         return Energy
@@ -562,7 +562,7 @@ class ScalarField(ScalarFieldEnvelope):
         self.omega0 = k0 * c
 
         self.t = t_axis.copy()
-        self.dt = t_axis[[0,1]].ptp()
+        self.dt = np.ptp( t_axis[[0,1]] )
         self.cdt = c * self.dt
 
         self.Nt = self.t.size
@@ -691,9 +691,9 @@ class ScalarField(ScalarFieldEnvelope):
                 trapezoid(np.abs(self.Field)**2 * self.r, self.r), c * self.t
             )
         else:
-            dx = self.x[[0,1]].ptp()
-            dy = self.y[[0,1]].ptp()
-            cdt = c * self.t[[0,1]].ptp()
+            dx = np.ptp( self.x[[0,1]] )
+            dy = np.ptp( self.y[[0,1]] )
+            cdt = c * np.ptp( self.t[[0,1]] )
             Energy = 2 * np.pi * epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
 
@@ -712,14 +712,14 @@ class ScalarField(ScalarFieldEnvelope):
             return None
 
         if len(self.Field_ft[0].shape)==1:
-            Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * trapezoid(
+            Energy = 4 * np.pi * epsilon_0 * c * np.ptp(self.t) * trapezoid(
                 ( np.abs(self.Field_ft)**2 ).sum(0) * self.r, self.r
             )
         else:
-            dx = self.x[[0,1]].ptp()
-            dy = self.y[[0,1]].ptp()
+            dx = np.ptp( self.x[[0,1]] )
+            dy = np.ptp( self.y[[0,1]] )
 
-            Energy = 4 * np.pi * epsilon_0 * c * self.t.ptp() * \
+            Energy = 4 * np.pi * epsilon_0 * c * np.ptp(self.t) * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
 
 
