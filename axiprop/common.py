@@ -185,7 +185,7 @@ class CommonTools:
         """
         Rmax, Nr = r_axis
         r = np.linspace(0, Rmax, Nr, endpoint=False)
-        dr = r[[0,1]].ptp()
+        dr = np.ptp( r[[0,1]] )
         r += 0.5 * dr
         return r, Rmax, Nr
 
