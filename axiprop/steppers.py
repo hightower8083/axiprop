@@ -28,6 +28,7 @@ class StepperNonParaxial:
     This class should to be used to derive the actual Propagators
     by adding proper methods for the Transverse Spectral Transforms (TST).
     """
+
     def step(self, u, dz, overwrite=False, show_progress=False):
         """
         Propagate wave `u` over the distance `dz`.
@@ -47,11 +48,20 @@ class StepperNonParaxial:
         """
         assert u.dtype == self.dtype
 
-        if not overwrite:
-            u_step = np.empty((self.Nkz, *self.shape_trns_new),
-                              dtype=u.dtype)
+        if type(u)==np.ndarray:
+            on_device = False
         else:
+            on_device = True
+
+        if overwrite:
             u_step = u
+        else:
+            if on_device:
+                u_step = self.bcknd.zeros((self.Nkz, *self.shape_trns_new),
+                                  dtype=u.dtype)
+            else:
+                u_step = np.zeros((self.Nkz, *self.shape_trns_new),
+                                  dtype=u.dtype)
 
         if tqdm_available and show_progress:
             pbar = tqdm(total=self.Nkz, bar_format=bar_format)
@@ -60,7 +70,11 @@ class StepperNonParaxial:
             if self.kz[ikz] <= 0:
                 continue
 
-            self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
+            if on_device:
+                self.u_loc = u[ikz,:].copy()
+            else:
+                self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
+
             self.TST()
 
             phase_loc = self.kz[ikz]**2 - self.kr2
@@ -68,59 +82,12 @@ class StepperNonParaxial:
             self.u_ht *= self.bcknd.exp( 1j * dz * phase_loc )
 
             self.iTST()
-            u_step[ikz] = self.bcknd.to_host(self.u_iht)
-            if tqdm_available and show_progress:
-                pbar.update(1)
 
-        if tqdm_available and show_progress:
-            pbar.close()
+            if on_device:
+                u_step[ikz] = self.u_iht.copy()
+            else:
+                u_step[ikz] = self.bcknd.to_host(self.u_iht)
 
-        return u_step
-
-    def step_on_device(self, u, dz, overwrite=False, show_progress=False):
-        """
-        Propagate wave `u` over the distance `dz`.
-
-        Parameters
-        ----------
-        u: 2darray of complex or double
-            Spectral-radial distribution of the field to propagate.
-
-        dz: float (m)
-            Distance over which wave should be propagated.
-
-        Returns
-        -------
-        u: 2darray of complex or double
-            Overwritten array with the propagated field.
-        """
-        assert u.dtype == self.dtype
-
-        if not overwrite:
-            u_step = self.bcknd.zeros((self.Nkz, *self.shape_trns_new),
-                              dtype=u.dtype)
-        else:
-            u_step = u
-
-        if tqdm_available and show_progress:
-            pbar = tqdm(total=self.Nkz, bar_format=bar_format)
-
-        for ikz in range(self.Nkz):
-            if self.kz[ikz] <= 0:
-                continue
-
-            # assuming data is already on device
-            #self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
-            self.u_loc = u[ikz,:].copy()
-            self.TST()
-
-            phase_loc = self.kz[ikz]**2 - self.kr2
-            phase_loc = self.bcknd.sqrt( (phase_loc>=0.)*phase_loc )
-            self.u_ht *= self.bcknd.exp( 1j * dz * phase_loc )
-
-            self.iTST()
-            # u_step[ikz] = self.bcknd.to_host(self.u_iht)
-            u_step[ikz] = self.u_iht.copy()
             if tqdm_available and show_progress:
                 pbar.update(1)
 
