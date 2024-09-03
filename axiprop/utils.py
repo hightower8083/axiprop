@@ -230,6 +230,9 @@ def export_to_lasy(Container, polarization=(1,0), dimensions='rt'):
         hi = ( Container.x.min(), Container.y.min(), Container.t.max() )
         num_points = ( Container.x.size, Container.y.size, Container.t.size )
 
+    if not hasattr(Container, 'Field'):
+        Container.frequency_to_time()
+
     laser = Laser(dimensions, lo, hi, num_points, empty_profile)
     laser.grid.field[:] = np.moveaxis(Container.Field, 0, -1)
 
