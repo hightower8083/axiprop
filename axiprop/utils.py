@@ -54,12 +54,14 @@ def refine1d(A, refine_ord, kind='linear'):
 
     return A_new
 
-def refine1d_TR(A, refine_ord, kind='linear'):
+def refine1d_TR(A, refine_ord, kind='linear', Nr_max=None):
     Nt, Nr = A.shape
     Nt_new = refine_ord * (Nt-1) + 1
     A_new = np.zeros((Nt_new, Nr), dtype=A.dtype)
+    if Nr_max is None:
+        Nr_max = Nr
 
-    for ir in range(Nr):
+    for ir in range(Nr_max):
         A_new[:, ir] = refine1d(A[:, ir], refine_ord=refine_ord, kind=kind)
     return A_new
 

@@ -120,7 +120,7 @@ class PlasmaIonization(PlasmaRelativistic):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='AC', **kw_args):
+                  ionization_mode='AC', Nr_max=None, **kw_args):
 
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
@@ -128,6 +128,7 @@ class PlasmaIonization(PlasmaRelativistic):
         self.T_e = np.zeros_like( sim.prop.r_new )
         self.Z_init = Z_init
         self.Zmax = Zmax
+        self.Nr_max = Nr_max
         self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
@@ -198,7 +199,8 @@ class PlasmaIonization(PlasmaRelativistic):
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
             E_loc_t, A_loc_t, self.dt, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current,
+            self.Nr_max
         )
 
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
@@ -289,12 +291,13 @@ class PlasmaIonizationRefine(PlasmaIonization):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='DC', refine_ord=8, **kw_args):
+                  ionization_mode='DC', refine_ord=8,
+                  Nr_max=None, **kw_args):
 
         super().__init__(n_gas, dens_func, sim,
             my_element=my_element, Z_init=Z_init, Zmax=Zmax,
             ionization_current=ionization_current,
-            ionization_mode=ionization_mode)
+            ionization_mode=ionization_mode, Nr_max=Nr_max)
 
         self.refine_ord = refine_ord
 
@@ -325,8 +328,8 @@ class PlasmaIonizationRefine(PlasmaIonization):
         A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
 
         if self.refine_ord>1:
-            E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)
-            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord)
+            E_loc_t = refine1d_TR(E_loc_t, self.refine_ord, Nr_max=self.Nr_max)
+            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord, Nr_max=self.Nr_max)
             t_axis  = refine1d(sim.t_axis, self.refine_ord)
         else:
             t_axis = sim.t_axis.copy()
@@ -334,7 +337,8 @@ class PlasmaIonizationRefine(PlasmaIonization):
         Jp_loc_t_re, self.n_e, self.T_e, self.Xi = get_plasma_ADK_ref(
             E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current,
+            self.Nr_max
         )
 
         Jp_loc_t = np.exp(1j * sim.omega0 * sim.t_axis)[:, None] \
