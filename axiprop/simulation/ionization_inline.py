@@ -18,21 +18,16 @@ def get_ADK_probability(E_fld, dt, adk_power, \
 
 @jit(nopython=True, cache=True, parallel=True)
 def get_plasma_ADK( E_laser, A_laser, dt, n_gas, pack_ADK, Uion,
-                    Z_init, Zmax, ionization_current, Nr_max_in ):
+                    Z_init, Zmax, ionization_current ):
 
     num_ions = pack_ADK[0].size + 1
     Nt, Nr = E_laser.shape
-
-    if Nr_max_in is None:
-        Nr_max = Nr
-    else:
-        Nr_max = Nr_max_in
 
     J_plasma = np.zeros_like(E_laser)
     n_e = np.zeros(Nr)
     IonizationEnergy = np.zeros(Nr)
 
-    for ir in prange(Nr_max):
+    for ir in prange(Nr):
 
         n_gas_loc = n_gas[ir]
 
@@ -161,15 +156,10 @@ def get_OFI_heating(
 @jit(nopython=True, cache=True, parallel=True)
 def get_plasma_ADK_ref( E_laser, A_laser, t_axis, omega0,
                         n_gas, pack_ADK, Uion,
-                        Z_init, Zmax, ionization_current, Nr_max_in ):
+                        Z_init, Zmax, ionization_current ):
 
     num_ions = pack_ADK[0].size + 1
     Nt, Nr = E_laser.shape
-
-    if Nr_max_in is None:
-        Nr_max = Nr
-    else:
-        Nr_max = Nr_max_in
 
     dt = t_axis[1] - t_axis[0]
     phase_env = np.exp(-1j * omega0 * t_axis)
@@ -179,7 +169,7 @@ def get_plasma_ADK_ref( E_laser, A_laser, t_axis, omega0,
     T_e = np.zeros(Nr)
     Xi = np.zeros( (Nr, num_ions) )
 
-    for ir in prange(Nr_max):
+    for ir in prange(Nr):
 
         n_gas_loc = n_gas[ir]
 

@@ -13,6 +13,7 @@ class Diagnostics:
         field.t += self.dt_shift
         field.t_loc += self.dt_shift
         field = field.import_field_ft(E_ft, transform=False)
+
         self.dt_shift = field.dt_to_center - self.z_loc/c
 
     def _record_diags(self, E_fb, physprocs, i_diag, write_dir):

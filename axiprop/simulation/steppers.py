@@ -52,7 +52,6 @@ class StepperNonParaxialPlasma:
         for ikz in range(self.Nkz):
             self.u_loc = u[ikz,:].copy()
             self.TST_stepping()
-            #self.TST()
             u_out[ikz] = self.u_ht.copy()
 
         return u_out
