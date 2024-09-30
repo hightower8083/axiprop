@@ -4,6 +4,7 @@ from ..lib import PropagatorResampling
 from ..lib import PropagatorSymmetric
 from .steppers import StepperNonParaxialPlasma
 
+
 class PropagatorResamplingStepping(
     PropagatorResampling, StepperNonParaxialPlasma):
     """
@@ -35,6 +36,7 @@ class PropagatorResamplingStepping(
 
         self.u_ht = self.TST_resampled_matmul(
             self.TM_resampled, self.u_loc, self.u_ht)
+
 
 class PropagatorSymmetricStepping(
     PropagatorSymmetric, StepperNonParaxialPlasma):

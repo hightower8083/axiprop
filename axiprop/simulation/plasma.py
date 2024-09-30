@@ -47,6 +47,7 @@ class PlasmaSimple:
 
         return Jp_ts
 
+
 class PlasmaSimpleNonuniform(PlasmaSimple):
 
     def get_RHS(self, E_ts, dz=0.0 ):
@@ -116,11 +117,12 @@ class PlasmaRelativistic:
 
         return Jp_ts
 
+
 class PlasmaIonization(PlasmaRelativistic):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='AC', **kw_args):
+                  ionization_mode='AC', Nr_max=None, **kw_args):
 
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
@@ -128,6 +130,7 @@ class PlasmaIonization(PlasmaRelativistic):
         self.T_e = np.zeros_like( sim.prop.r_new )
         self.Z_init = Z_init
         self.Zmax = Zmax
+        self.Nr_max = Nr_max
         self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
@@ -185,15 +188,25 @@ class PlasmaIonization(PlasmaRelativistic):
         A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
 
+        Jp_ft = np.zeros_like(E_loc)
+        Nr = A_loc.shape[-1]
+
+        if self.Nr_max is None:
+            Nr_max = Nr
+        elif self.Nr_max>Nr:
+            Nr_max = Nr
+        else:
+            Nr_max = self.Nr_max
+
         E_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         E_loc_obj.t += sim.dt_shift
         E_loc_obj.t_loc += sim.dt_shift
-        E_loc_t = E_loc_obj.import_field_ft(E_loc).Field
+        E_loc_t = E_loc_obj.import_field_ft(E_loc[:,:Nr_max]).Field
 
         A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         A_loc_obj.t += sim.dt_shift
         A_loc_obj.t_loc += sim.dt_shift
-        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
+        A_loc_t = A_loc_obj.import_field_ft(A_loc[:,:Nr_max]).Field
 
         Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
             E_loc_t, A_loc_t, self.dt, n_gas,
@@ -204,7 +217,93 @@ class PlasmaIonization(PlasmaRelativistic):
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
         Jp_obj.t_loc += sim.dt_shift
-        Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
+        Jp_ft[:,:Nr_max] = Jp_obj.import_field(Jp_loc_t).Field_ft
+
+        Jp_ft *= self.lowpass_filt
+
+        Jp_ts = prop.perform_transfer_TST( Jp_ft )
+
+        if dz != 0.0:
+            sim.t_axis -= dz / c
+            Jp_ts = prop.step_simple(Jp_ts, -dz)
+
+        Jp_ts *= self.coef_RHS
+
+        return Jp_ts
+
+
+class PlasmaIonizationRefine(PlasmaIonization):
+
+    def __init__( self, n_gas, dens_func, sim, my_element,
+                  Z_init=0, Zmax=-1, ionization_current=True,
+                  ionization_mode='DC', refine_ord=8,
+                  Nr_max=None, **kw_args):
+
+        super().__init__(n_gas, dens_func, sim,
+            my_element=my_element, Z_init=Z_init, Zmax=Zmax,
+            ionization_current=ionization_current,
+            ionization_mode=ionization_mode, Nr_max=Nr_max)
+
+        self.refine_ord = refine_ord
+
+    def get_RHS(self, E_ts, dz=0.0 ):
+        sim = self.sim
+        prop = self.sim.prop
+        omega = sim.prop.kz[:, None] * c
+
+        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, prop.r_new )
+
+        if dz != 0.0:
+            sim.t_axis += dz / c
+            E_loc = prop.step_and_iTST_transfer(E_ts, dz)
+        else:
+            E_loc = prop.perform_iTST_transfer(E_ts)
+
+        A_loc = -1j * prop.omega_inv * E_loc
+        A_loc *= (omega>0.0)
+
+        Jp_ft = np.zeros_like(E_loc)
+        Nr = A_loc.shape[-1]
+
+        if self.Nr_max is None:
+            Nr_max = Nr
+        elif self.Nr_max>Nr:
+            Nr_max = Nr
+        else:
+            Nr_max = self.Nr_max
+
+        E_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        E_loc_obj.t += sim.dt_shift
+        E_loc_obj.t_loc += sim.dt_shift
+        E_loc_t = E_loc_obj.import_field_ft(E_loc[:,:Nr_max]).Field
+
+        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_loc_obj.t += sim.dt_shift
+        A_loc_obj.t_loc += sim.dt_shift
+        A_loc_t = A_loc_obj.import_field_ft(A_loc[:,:Nr_max]).Field
+
+        if self.refine_ord>1:
+            E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)
+            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord)
+            t_axis  = refine1d(sim.t_axis, self.refine_ord)
+        else:
+            t_axis = sim.t_axis.copy()
+
+        Jp_loc_t_re, self.n_e, self.T_e, self.Xi = get_plasma_ADK_ref(
+            E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
+            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        )
+
+        Jp_loc_t = np.exp(1j * sim.omega0 * sim.t_axis)[:, None] \
+            * np.conj(
+                hilbert(Jp_loc_t_re, axis=0)[::self.refine_ord]
+              )
+
+        Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        Jp_obj.t += sim.dt_shift
+        Jp_obj.t_loc += sim.dt_shift
+        Jp_ft[:,:Nr_max] = Jp_obj.import_field(Jp_loc_t).Field_ft
 
         Jp_ft *= self.lowpass_filt
 
@@ -283,78 +382,3 @@ class OFI_heating:
             E_loc_t, P_loc_t, t_axis, sim.omega0, n_gas_loc,
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
             self.Z_init, self.Zmax)
-
-
-class PlasmaIonizationRefine(PlasmaIonization):
-
-    def __init__( self, n_gas, dens_func, sim, my_element,
-                  Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='DC', refine_ord=8, **kw_args):
-
-        super().__init__(n_gas, dens_func, sim,
-            my_element=my_element, Z_init=Z_init, Zmax=Zmax,
-            ionization_current=ionization_current,
-            ionization_mode=ionization_mode)
-
-        self.refine_ord = refine_ord
-
-    def get_RHS(self, E_ts, dz=0.0 ):
-        sim = self.sim
-        prop = self.sim.prop
-        omega = sim.prop.kz[:, None] * c
-
-        n_gas = self.n_gas * self.dens_func( sim.z_loc + dz, prop.r_new )
-
-        if dz != 0.0:
-            sim.t_axis += dz / c
-            E_loc = prop.step_and_iTST_transfer(E_ts, dz)
-        else:
-            E_loc = prop.perform_iTST_transfer(E_ts)
-
-        A_loc = -1j * prop.omega_inv * E_loc
-        A_loc *= (omega>0.0)
-
-        E_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        E_loc_obj.t += sim.dt_shift
-        E_loc_obj.t_loc += sim.dt_shift
-        E_loc_t = E_loc_obj.import_field_ft(E_loc).Field
-
-        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        A_loc_obj.t += sim.dt_shift
-        A_loc_obj.t_loc += sim.dt_shift
-        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
-
-        if self.refine_ord>1:
-            E_loc_t = refine1d_TR(E_loc_t, self.refine_ord)
-            A_loc_t = refine1d_TR(A_loc_t, self.refine_ord)
-            t_axis  = refine1d(sim.t_axis, self.refine_ord)
-        else:
-            t_axis = sim.t_axis.copy()
-
-        Jp_loc_t_re, self.n_e, self.T_e, self.Xi = get_plasma_ADK_ref(
-            E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
-            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current
-        )
-
-        Jp_loc_t = np.exp(1j * sim.omega0 * sim.t_axis)[:, None] \
-            * np.conj(
-                hilbert(Jp_loc_t_re, axis=0)[::self.refine_ord]
-              )
-
-        Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        Jp_obj.t += sim.dt_shift
-        Jp_obj.t_loc += sim.dt_shift
-        Jp_ft = Jp_obj.import_field(Jp_loc_t).Field_ft
-
-        Jp_ft *= self.lowpass_filt
-
-        Jp_ts = prop.perform_transfer_TST( Jp_ft )
-
-        if dz != 0.0:
-            sim.t_axis -= dz / c
-            Jp_ts = prop.step_simple(Jp_ts, -dz)
-
-        Jp_ts *= self.coef_RHS
-
-        return Jp_ts
