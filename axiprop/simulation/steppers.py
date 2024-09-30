@@ -156,10 +156,11 @@ class StepperNonParaxialPlasma:
             image = self.bcknd.zeros( out_shape, self.dtype )
 
         for ikz in range(self.Nkz):
-            self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
             if stepping:
+                self.u_iht = self.bcknd.to_device(u[ikz,:].copy())
                 self.TST_stepping()
             else:
+                self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
                 self.TST()
             image[ikz] = self.u_ht.copy()
 
