@@ -34,7 +34,7 @@ class StepperNonParaxialPlasma:
 
         return u_out
 
-    def perform_TST(self, u, u_out=None):
+    def perform_TST(self, u, u_out=None, stepping=True):
         """
         Initiate the stepped propagation mode. This mode allows
         computation of the consequent steps with access to the result on
@@ -49,10 +49,16 @@ class StepperNonParaxialPlasma:
             out_shape = (self.Nkz, *self.shape_trns)
             u_out = self.bcknd.zeros( out_shape, self.dtype )
 
-        for ikz in range(self.Nkz):
-            self.u_loc = u[ikz,:].copy()
-            self.TST_stepping()
-            u_out[ikz] = self.u_ht.copy()
+        if stepping:
+            for ikz in range(self.Nkz):
+                self.u_iht = u[ikz,:].copy()
+                self.TST_stepping()
+                u_out[ikz] = self.u_ht.copy()
+        else:
+            for ikz in range(self.Nkz):
+                self.u_loc = u[ikz,:].copy()
+                self.TST()
+                u_out[ikz] = self.u_ht.copy()
 
         return u_out
 
@@ -155,14 +161,16 @@ class StepperNonParaxialPlasma:
             out_shape = (self.Nkz, *self.shape_trns)
             image = self.bcknd.zeros( out_shape, self.dtype )
 
-        for ikz in range(self.Nkz):
-            if stepping:
+        if stepping:
+            for ikz in range(self.Nkz):
                 self.u_iht = self.bcknd.to_device(u[ikz,:].copy())
                 self.TST_stepping()
-            else:
+                image[ikz] = self.u_ht.copy()
+        else:
+            for ikz in range(self.Nkz):
                 self.u_loc = self.bcknd.to_device(u[ikz,:].copy())
                 self.TST()
-            image[ikz] = self.u_ht.copy()
+                image[ikz] = self.u_ht.copy()
 
         return image
 

@@ -45,7 +45,6 @@ class PropagatorSymmetricStepping(
     A propagator with account for plasma response,
     based on `PropagatorSymmetric`
     """
-    TST_stepping = PropagatorSymmetric.TST
 
     def init_TST_stepping(self):
         Rmax = self.Rmax
@@ -66,7 +65,7 @@ class PropagatorSymmetricStepping(
         self.TM_stepping = self.bcknd.to_device(TM[:,:Nr_new], dtype)
 
         self.TST_stepping_matmul = self.bcknd.make_matmul(self.TM_stepping, self.u_iht, self.u_ht)
-        
+
     def TST_stepping(self):
         """
         """
@@ -78,4 +77,3 @@ class PropagatorSymmetricStepping(
         self.u_ht = self.TST_stepping_matmul(
             self.TM_stepping, self.u_iht, self.u_ht)
 
-            
