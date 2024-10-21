@@ -119,9 +119,14 @@ class DiagsAPI:
         self.filelist.sort()
         self.N_diags = len(self.filelist)
 
-    def get_various(self, various_diags_path='./'):
+    def get_various(self, various_diags_path=None):
+        if various_diags_path is None:
+            various_diags_path = '/'.join(
+                self.diags_path.split('/')[:-2]
+                )
+
         diags = {}
-        with h5py.File(various_diags_path+'various_diags.h5', mode='r') as fl:
+        with h5py.File(various_diags_path+'/various_diags.h5', mode='r') as fl:
             for key in fl.keys():
                 diags[key] = fl[key][()]
         return diags

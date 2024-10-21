@@ -88,10 +88,8 @@ class SolverBase(Diagnostics):
 
         if open_boundaries_r:
             self.dump_mask = np.zeros(n_dump_field)
-            r_dump = np.linspace(0, 1, 3*n_dump_field//4)
-
-            self.dump_mask[:r_dump.size] = \
-                ( 1 - np.exp(-(3 * r_dump)**2) )[::-1]
+            r_dump = np.linspace(0, 1, n_dump_field)
+            self.dump_mask[:r_dump.size] = np.exp(-(2 * r_dump)**4)
 
             self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
@@ -135,8 +133,6 @@ class SolverBase(Diagnostics):
             self._pbar_init(Lz)
 
         i_diag = 0
-        self._record_diags(En_ts, physprocs, i_diag, write_dir)
-        i_diag += 1
         do_diag_next = False
 
         while (self.z_loc <= self.z_0 + Lz) and self.is_finite(En_ts):
