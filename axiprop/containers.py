@@ -30,10 +30,10 @@ def apply_boundary_r(A, dump_mask):
     if len(A[0].shape)==1:
         A[:,-n_dump:] *= dump_mask[None,:]
     elif len(A[0].shape)==2:
-        A[:,:n_dump,:] = dump_mask[::-1][None,:,None]
-        A[:,:,:n_dump] = dump_mask[::-1][None,None,:]
-        A[:,-n_dump:,:] = dump_mask[None,:,None]
-        A[:,:,-n_dump:] = dump_mask[None,None,:]
+        A[:,:n_dump,:] *= dump_mask[::-1][None,:,None]
+        A[:,:,:n_dump] *= dump_mask[::-1][None,None,:]
+        A[:,-n_dump:,:] *= dump_mask[None,:,None]
+        A[:,:,-n_dump:] *= dump_mask[None,None,:]
     return A
 
 def apply_boundary_t(A, dump_mask):
