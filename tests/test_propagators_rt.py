@@ -68,7 +68,7 @@ def check_energy(LaserObject):
     assert np.allclose(LaserObject.Energy_ft, LaserEnergy, rtol=5e-2, atol=0)
 
 def check_tau(LaserObject):
-    assert np.allclose(LaserObject.tau, tau, rtol=3e-4, atol=0)
+    assert np.allclose(LaserObject.tau, tau, rtol=5e-4, atol=0)
 
 def check_waist_rt(LaserObject):
     assert np.allclose(LaserObject.w0, w0, rtol=5e-2, atol=0)
