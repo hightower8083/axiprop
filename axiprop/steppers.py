@@ -376,6 +376,7 @@ class StepperFresnel:
 
             self.u_loc[:] = self.bcknd.to_device(u[ikz,:].copy())
             self.u_loc *= self.bcknd.exp(0.5j * self.kz[ikz] / dz * self.r2)
+            # self.u_loc /= ( 1 + self.r2 / dz**2) # possibly a correction [WIP]
             self.TST()
             u_slice_loc = self.bcknd.to_host(self.u_ht)
 
