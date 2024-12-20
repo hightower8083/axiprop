@@ -271,7 +271,7 @@ class CommonTools:
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
         if x_loc.size==x_new.size and y_loc.size==y_new.size:
-            if np.alltrue(x_loc==x_new) and np.alltrue(y_loc==y_new):
+            if np.all(x_loc==x_new) and np.all(y_loc==y_new):
                 return u_loc
 
         fu_interp_abs = RectBivariateSpline(
