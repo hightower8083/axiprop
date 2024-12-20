@@ -30,10 +30,10 @@ def apply_boundary_r(A, dump_mask):
     if len(A[0].shape)==1:
         A[:,-n_dump:] *= dump_mask[None,:]
     elif len(A[0].shape)==2:
-        A[:,:n_dump,:] = dump_mask[::-1][None,:,None]
-        A[:,:,:n_dump] = dump_mask[::-1][None,None,:]
-        A[:,-n_dump:,:] = dump_mask[None,:,None]
-        A[:,:,-n_dump:] = dump_mask[None,None,:]
+        A[:,:n_dump,:] *= dump_mask[::-1][None,:,None]
+        A[:,:,:n_dump] *= dump_mask[::-1][None,None,:]
+        A[:,-n_dump:,:] *= dump_mask[None,:,None]
+        A[:,:,-n_dump:] *= dump_mask[None,None,:]
     return A
 
 def apply_boundary_t(A, dump_mask):
@@ -222,7 +222,7 @@ class ScalarFieldEnvelope:
             dx = np.ptp( self.x[[0,1]] )
             dy = np.ptp( self.y[[0,1]] )
             cdt = c * np.ptp( self.t[[0,1]] )
-            Energy = np.pi * epsilon_0 * \
+            Energy = 0.5 * epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
 
         return Energy
@@ -246,7 +246,7 @@ class ScalarFieldEnvelope:
             dx = np.ptp( self.x[[0,1]] )
             dy = np.ptp( self.y[[0,1]] )
 
-            Energy = np.pi * epsilon_0 * c * np.ptp(self.t) * \
+            Energy = 0.5 * epsilon_0 * c * np.ptp(self.t) * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
 
         return Energy
@@ -694,7 +694,7 @@ class ScalarField(ScalarFieldEnvelope):
             dx = np.ptp( self.x[[0,1]] )
             dy = np.ptp( self.y[[0,1]] )
             cdt = c * np.ptp( self.t[[0,1]] )
-            Energy = 2 * np.pi * epsilon_0 * \
+            Energy = epsilon_0 * \
                 np.sum( np.abs(self.Field)**2 ) * dx * dy * cdt
 
 
@@ -719,7 +719,7 @@ class ScalarField(ScalarFieldEnvelope):
             dx = np.ptp( self.x[[0,1]] )
             dy = np.ptp( self.y[[0,1]] )
 
-            Energy = 4 * np.pi * epsilon_0 * c * np.ptp(self.t) * \
+            Energy = 2 * epsilon_0 * c * np.ptp(self.t) * \
                 ( np.abs(self.Field_ft)**2 ).sum() * dx * dy
 
 
