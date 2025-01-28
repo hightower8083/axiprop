@@ -109,7 +109,7 @@ class Diagnostics:
             for diag_str in self.diags.keys():
                 fl[diag_str] = self.diags[diag_str]
             fl['errors'] = self.errors
-            fl['_axis_err'] = self.z_axis_err
+            fl['z_axis_err'] = self.z_axis_err
 
 
 class DiagsAPI:
