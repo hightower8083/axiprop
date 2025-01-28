@@ -202,6 +202,94 @@ class ScalarFieldEnvelope:
 
         return self
 
+    def make_pulse(self, r_axis, profile_spectral, profile_spatial,
+                   a0=None, Energy=None, t0=0.0, phi0=0.0, n_ord=2,
+                   omega0=None, transform=True):
+        """
+        Initialize the Gaussian pulse
+
+        Parameters
+        ----------
+        r: float ndarray (m)
+            Radial grid for the container
+
+        tau: float (s)
+            Duration of the pulse (FBPIC definition)
+
+        w0: float (m)
+            Waist of the pulse (FBPIC definition)
+
+        a0: float (optional)
+          Normalized amplitude of the pulse
+
+        Energy: float (J) (optional)
+          Energy of the pulse
+
+        t0: float (s) (optional)
+            Time corresponding the peak field
+
+        phi0: float (rad) (optional)
+            Carrier envelop phase (CEP)
+
+        n_ord: int (optional)
+            Order of Gaussian profile of TEM
+
+        omega0: float (s^-1) (optional)
+            central frequency of the pulse
+
+        transform: bool (optional)
+            Wether to transform the field to the frequency domain
+        """
+        t = self.t
+
+        if type(r_axis) is tuple and len(r_axis)==3:
+            self.r = r_axis[0].copy()
+            self.x = r_axis[1].copy()
+            self.y = r_axis[2].copy()
+        elif type(r_axis) is np.ndarray and len(r_axis.shape)==1:
+            self.r = r_axis.copy()
+        else:
+            warn("Input `r_axis` must be either 1D ndarray for RZ, or " + \
+                 "a tuple `(r, x, y)` with r: 2D ndarray, x/y: 1D ndarrays"
+            )
+
+        self.r_shape = self.r.shape
+
+        if type(profile_spatial) is not np.ndarray:
+            profile_spatial = np.exp( -( self.r/profile_spatial )**n_ord )
+
+        if Energy is not None and a0 is None:
+            a0 = 1.0
+        elif Energy is None and a0 is None:
+            warn('Either `a0` of `Energy` must be specified.')
+
+        if omega0 is None:
+            omega0 = self.omega0
+
+        if len(self.r.shape) == 1:
+            profile_spectral = profile_spectral[:, None]
+            self.k_freq_shaped = self.k_freq[:, None]
+            self.k_freq_base_shaped = self.k_freq_base[:, None]
+        elif len(self.r.shape) == 2:
+            profile_spectral = profile_spectral[:, None, None]
+            self.k_freq_shaped = self.k_freq[:, None, None]
+            self.k_freq_base_shaped = self.k_freq_base[:, None, None]
+
+        E0 = a0 * m_e * c * omega0 / e
+        self.Field_ft = ( E0 * profile_spectral * profile_spatial[None,:] ) \
+                        .astype(self.dtype)
+
+        if Energy is not None:
+            self.Field_ft *= ( Energy / self.Energy_ft ) ** 0.5
+
+        self.Field = np.zeros(
+            (self.Nk_freq, *self.r_shape), dtype=self.dtype
+        )
+        self.frequency_to_time()
+
+
+        return self
+
     @property
     def Energy(self):
         """
