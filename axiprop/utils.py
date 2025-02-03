@@ -234,6 +234,6 @@ def export_to_lasy(Container, polarization=(1,0), dimensions='rt'):
         Container.frequency_to_time()
 
     laser = Laser(dimensions, lo, hi, num_points, empty_profile)
-    laser.grid.field[:] = np.moveaxis(Container.Field, 0, -1)
+    laser.grid.set_temporal_field(np.moveaxis(Container.Field, 0, -1)[None,...])
 
     return laser
