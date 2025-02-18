@@ -55,7 +55,10 @@ class PropagatorSymmetricStepping(
         alpha = self.alpha
         alpha_np1 = self.alpha_np1
 
-        self._j_stepping = self.bcknd.to_device( np.abs(jn(mode+1, alpha)) / Rmax )[:Nr_new]
+        self._j_stepping = self.bcknd.to_device(
+            np.abs(jn(mode+1, alpha)) / Rmax
+        )[:Nr_new]
+
         denominator = alpha_np1 * np.abs(jn(mode+1, alpha[:,None]) \
                                        * jn(mode+1, alpha[None,:]))
 
@@ -64,7 +67,9 @@ class PropagatorSymmetricStepping(
 
         self.TM_stepping = self.bcknd.to_device(TM[:,:Nr_new], dtype)
 
-        self.TST_stepping_matmul = self.bcknd.make_matmul(self.TM_stepping, self.u_iht, self.u_ht)
+        self.TST_stepping_matmul = self.bcknd.make_matmul(
+            self.TM_stepping, self.u_iht, self.u_ht
+        )
 
     def TST_stepping(self):
         """
