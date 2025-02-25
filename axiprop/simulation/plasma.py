@@ -159,7 +159,7 @@ class PlasmaIonization(PlasmaRelativistic):
 
         if ionization_mode == 'AC':
             self.adk_power = - (2*n_eff - 1.5)
-            self.adk_prefactor = (3/np.pi)**0.5 * omega_a * C2 * \
+            self.adk_prefactor = (6 / np.pi)**0.5 * omega_a * C2 * \
                 ( Uion/(2*UH) ) * ( 2 * (Uion/UH)**1.5 * Ea )**(2*n_eff - 1.5)
         elif ionization_mode == 'DC':
             self.adk_power = - (2*n_eff - 1)
@@ -235,13 +235,12 @@ class PlasmaIonizationRefine(PlasmaIonization):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='DC', refine_ord=8,
-                  Nr_max=None, **kw_args):
+                  Nr_max=None, refine_ord=8, **kw_args):
 
         super().__init__(n_gas, dens_func, sim,
             my_element=my_element, Z_init=Z_init, Zmax=Zmax,
             ionization_current=ionization_current,
-            ionization_mode=ionization_mode, Nr_max=Nr_max)
+            ionization_mode='DC', Nr_max=Nr_max)
 
         self.refine_ord = refine_ord
 
