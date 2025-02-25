@@ -517,11 +517,12 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:Nr]
+        self.TM *= 2 * np.pi * (-1j)**mode
 
         self.TM = self.bcknd.to_device(self.TM)
 
-        self.shape_trns = (Nr, )
-        self.shape_trns_new = (Nr_new, )
+        self.shape_trns = (Nr,)
+        self.shape_trns_new = (Nr_new,)
 
         self.u_loc = self.bcknd.zeros(Nr, dtype)
         self.u_ht = self.bcknd.zeros(Nkr_new, dtype)
@@ -533,7 +534,6 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         Forward QDHT transform.
         """
         self.u_ht = self.TST_matmul(self.TM, self.u_loc, self.u_ht)
-        self.u_ht *= 2 * np.pi
 
     def get_local_grid(self, dz, ikz):
         r_loc = dz * self.kr[:self.Nkr_new] / self.kz[ikz]
