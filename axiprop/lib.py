@@ -169,7 +169,7 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, mode=0,
                  dtype=np.complex128,
-                 boundary_r_new=False,
+                 rmax_boundary=None,
                  backend=None, verbose=True):
         """
         Construct the propagator.
@@ -240,10 +240,12 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
         else:
             self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
 
-        if boundary_r_new:
-            self.init_kr(self.Rmax_new, self.Nr)
+        if rmax_boundary is None:
+            Rmax_boundary = self.Rmax  #np.max([self.Rmax, self.Rmax_new])
         else:
-            self.init_kr(self.Rmax, self.Nr)
+            Rmax_boundary = rmax_boundary
+
+        self.init_kr(Rmax_boundary, self.Nr)
 
         self.init_TST()
 
