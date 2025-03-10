@@ -189,6 +189,9 @@ class CommonTools:
         r += 0.5 * dr
         return r, Rmax, Nr
 
+    def check_uniform(self, r):
+        return np.allclose( np.diff(r), np.diff(r).mean())
+
     def init_xy_uniform(self, x_axis, y_axis):
         """
         Setup the transverse `x` and `y` grids
