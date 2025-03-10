@@ -168,8 +168,8 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
 
     def __init__(self, r_axis, kz_axis,
                  r_axis_new=None, mode=0,
+                 r_axes_types=('bessel', 'uniform'),
                  dtype=np.complex128,
-                 rmax_boundary=None,
                  backend=None, verbose=True):
         """
         Construct the propagator.
@@ -215,6 +215,11 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
         mode: integer
             Order of Bessel function used for DHT
 
+        r_axes_types: tuple of strings (optional)
+            Sampling methods for the axes when generated internally.
+            Should be a tuple with two names for `r_axis` and `r_axis_new`
+            respectively, that can be either `'bessel'` or `'uniform'`.
+
         dtype: type (optional)
             Data type to be used. Default is np.complex128.
 
@@ -229,23 +234,53 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
         self.init_kz(kz_axis)
 
         if type(r_axis) is tuple:
-            self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
-        else:
+            if r_axes_types[0]=='bessel':
+                self.r, self.Rmax, self.Nr = self.init_r_symmetric(r_axis)
+            elif r_axes_types[0]=='uniform':
+                self.r, self.Rmax, self.Nr = self.init_r_uniform(r_axis)
+            else:
+                raise NameError
+        elif type(r_axis) is np.ndarray:
             self.r, self.Rmax, self.Nr = self.init_r_sampled(r_axis)
+        else:
+            raise TypeError
 
         if r_axis_new is None:
             self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
         elif type(r_axis_new) is tuple:
-            self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
-        else:
+            if r_axes_types[1]=='bessel':
+                self.r_new, self.Rmax_new, self.Nr_new = self.init_r_symmetric(r_axis_new)
+            elif r_axes_types[1]=='uniform':
+                self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
+            else:
+                raise NameError
+        elif type(r_axis_new) is np.ndarray:
             self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
-
-        if rmax_boundary is None:
-            Rmax_boundary = self.Rmax  #np.max([self.Rmax, self.Rmax_new])
         else:
-            Rmax_boundary = rmax_boundary
+            raise TypeError
 
-        self.init_kr(Rmax_boundary, self.Nr)
+        if self.Rmax_new<=self.Rmax:
+            self.r_ext = self.r.copy()
+            self.Nr_ext = self.Nr
+            self.Rmax_ext = self.Rmax
+        else:
+            if type(r_axis) is tuple:
+                if r_axes_types[0]=='bessel':
+                    raise NotImplementedError(
+                        "For diffracting cases use `'unifrom'` input sampling." \
+                        + "(see `r_axes_types` argument)"
+                    )
+            else:
+                if not self.check_uniform(self.r):
+                    raise NotImplementedError(
+                        "For diffracting cases `r_axis` must be uniform"
+                    )
+                dr = self.r[:2].ptp()
+                self.r_ext = np.arange(self.r[0], self.Rmax_new, dr)
+                self.Nr_ext = self.r_ext.size
+                self.Rmax_ext = self.r_ext[-1] + 0.5 * dr
+
+        self.init_kr(self.Rmax_ext, self.Nr_ext)
 
         self.init_TST()
 
@@ -265,7 +300,7 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
         """
         Nr = self.Nr
         Nr_new = self.Nr_new
-        r = self.r
+        r = self.r_ext # !!
         r_new = self.r_new
         kr = self.kr
         dtype = self.dtype
@@ -276,6 +311,8 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
             self.TM = self.bcknd.inv_sqr_on_host(self.TM, dtype)
         else:
             self.TM = self.bcknd.inv_on_host(self.TM, dtype)
+
+        self.TM = self.TM[:, :Nr]
 
         self.TM = self.bcknd.to_device(self.TM)
 
