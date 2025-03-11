@@ -45,6 +45,7 @@ class CommonTools:
     """
 
     def init_backend(self, backend, verbose):
+        self.verbose = verbose
 
         if verbose:
             print('Available backends are: ' \

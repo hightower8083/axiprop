@@ -239,11 +239,11 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
             elif r_axes_types[0]=='uniform':
                 self.r, self.Rmax, self.Nr = self.init_r_uniform(r_axis)
             else:
-                raise NameError
+                raise NameError("`r_axes_types` can be either `'uniform'` or `'bessel'`")
         elif type(r_axis) is np.ndarray:
             self.r, self.Rmax, self.Nr = self.init_r_sampled(r_axis)
         else:
-            raise TypeError
+            raise TypeError("`r_axis` can be either tuple or 1d-ndarray")
 
         if r_axis_new is None:
             self.r_new, self.Rmax_new, self.Nr_new = self.r, self.Rmax, self.Nr
@@ -253,17 +253,22 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
             elif r_axes_types[1]=='uniform':
                 self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
             else:
-                raise NameError
+                raise NameError("`r_axes_types` can be either `'uniform'` or `'bessel'`")
         elif type(r_axis_new) is np.ndarray:
             self.r_new, self.Rmax_new, self.Nr_new = self.init_r_sampled(r_axis_new)
         else:
-            raise TypeError
+            raise TypeError("`r_axis_new` can be either tuple, 1d-ndarray or `None`")
 
         if self.Rmax_new<=self.Rmax:
             self.r_ext = self.r.copy()
             self.Nr_ext = self.Nr
             self.Rmax_ext = self.Rmax
         else:
+            if self.verbose:
+                print (
+                    'Input r-grid is smaller, than the output one, and will be padded'
+                )
+
             if type(r_axis) is tuple:
                 if r_axes_types[0]=='bessel':
                     raise NotImplementedError(
@@ -300,7 +305,7 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
         """
         Nr = self.Nr
         Nr_new = self.Nr_new
-        r = self.r_ext # !!
+        r = self.r_ext # potentially use extended grid
         r_new = self.r_new
         kr = self.kr
         dtype = self.dtype
