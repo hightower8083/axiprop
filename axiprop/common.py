@@ -45,6 +45,7 @@ class CommonTools:
     """
 
     def init_backend(self, backend, verbose):
+        self.verbose = verbose
 
         if verbose:
             print('Available backends are: ' \
@@ -188,6 +189,9 @@ class CommonTools:
         dr = np.ptp( r[[0,1]] )
         r += 0.5 * dr
         return r, Rmax, Nr
+
+    def check_uniform(self, r):
+        return np.allclose( np.diff(r), np.diff(r).mean())
 
     def init_xy_uniform(self, x_axis, y_axis):
         """
