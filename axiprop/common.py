@@ -11,6 +11,7 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn_zeros
 from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RegularGridInterpolator
 from scipy.interpolate import Akima1DInterpolator
 import os
 
