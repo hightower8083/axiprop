@@ -16,20 +16,21 @@ from scipy.interpolate import Akima1DInterpolator
 import os
 
 try:
-    from unwrap import unwrap as unwrap2d
+    from skimage.restoration import unwrap_phase as unwrap2d
     unwrap_available = True
 except Exception:
     unwrap_available = False
 
 if not unwrap_available:
     try:
-        from skimage.restoration import unwrap_phase as unwrap2d
+        from unwrap import unwrap as unwrap2d
         unwrap_available = True
     except Exception:
         unwrap_available = False
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
+from .utils import unwrap2d_fast
 
 class CommonTools:
     """
@@ -247,7 +248,7 @@ class CommonTools:
         )
 
         fu_new_angl = Akima1DInterpolator(
-            r_loc, u_angl,
+            r_loc, u_angl
         )
 
         u_new_abs = fu_new_abs(r_new)
@@ -267,7 +268,7 @@ class CommonTools:
 
         if not unwrap_available:
             raise NotImplementedError(
-                "install `unwrap` or `scikit-image` for this propagator")
+                "install `scikit-image` or `unwrap` for this propagator")
 
         x_loc, y_loc = r_loc
         x_new, y_new = r_new
@@ -281,7 +282,7 @@ class CommonTools:
         )
 
         fu_interp_angl = RectBivariateSpline(
-            x_loc, y_loc, unwrap2d(np.angle(u_loc)),
+            x_loc, y_loc, unwrap2d( np.angle(u_loc) ),
             kx=3, ky=3,
         )
 

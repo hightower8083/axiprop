@@ -273,6 +273,7 @@ def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
         dxy = dr
 
     r = np.arange(0, rmax, dxy)
+    r += 0.5 * dxy
     th = np.linspace(0, 2*np.pi, Nm_ext, endpoint=False)
 
     Nr = r.size
@@ -296,20 +297,41 @@ def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
                 )
         )
 
-    for it in range(Nt):
-        E_slice = laser_txy.Field[it]
+    for ik in range(Nt):
+        E_slice = laser_txy.Field_ft[ik]
+
         E_slice_abs = np.abs(E_slice)
         E_slice_angl = unwrap2d(np.angle(E_slice))
 
-        E_abs_pg = RegularGridInterpolator((x,y), E_slice_abs, bounds_error=False, fill_value=0.0, method='cubic')((xx_pg, yy_pg))
-        E_angl_pg = RegularGridInterpolator((x,y), E_slice_angl, bounds_error=False, fill_value=0.0, method='cubic')((xx_pg, yy_pg))
+        E_slice_abs_max = np.max(E_slice_abs)
+        E_slice_angl_max = np.max(E_slice_angl)
+
+        if E_slice_abs_max>0:
+            E_slice_abs /= E_slice_abs_max
+
+        if E_slice_angl_max>0:
+            E_slice_angl /= E_slice_angl_max
+
+        E_slice_comb = E_slice_abs + 1.0j * E_slice_angl
+
+        E_slice_comb_pg = RegularGridInterpolator(
+            (x,y), E_slice_comb, bounds_error=False,
+            fill_value=0.0, method='linear'
+        )((xx_pg, yy_pg))
+
+        E_abs_pg = E_slice_abs_max * np.real(E_slice_comb_pg)
+        E_angl_pg = E_slice_angl_max * np.imag(E_slice_comb_pg)
 
         E_slice_pg = E_abs_pg * np.exp(1j * E_angl_pg)
+
         E_slice_pg = np.fft.ifft(E_slice_pg, axis=0)
 
         for im, m in enumerate(m_axis):
             im_ext = np.argwhere(m_axis_ext==m).flatten()[0]
-            laser_mtr[im].Field[it] = E_slice_pg[im_ext]
+            laser_mtr[im].Field_ft[ik] = E_slice_pg[im_ext]
+
+    for im, m in enumerate(m_axis):
+        laser_mtr[im].frequency_to_time()
 
     return laser_mtr, m_axis
 
@@ -344,9 +366,28 @@ def mtr_to_txy(laser_mtr, m_axis, x, y ):
         field_tr_angl = np.unwrap( np.angle(field_tr) )
 
         for it in range(laser_txy.t.size):
-            field_txy_abs = Akima1DInterpolator(r, field_tr_abs[it])(r_proj)
-            field_txy_angl = Akima1DInterpolator(r, field_tr_angl[it])(r_proj)
+            r_ext = np.r_[ [-r[0]], r ]
+            field_tr_abs_ext = np.r_[ field_tr_abs[it, 0], field_tr_abs[it]]
+            field_tr_angl_ext = np.r_[ field_tr_angl[it, 0], field_tr_angl[it]]
+
+            field_txy_abs = np.nan_to_num( Akima1DInterpolator(r_ext, field_tr_abs_ext)(r_proj) )
+            field_txy_angl = np.nan_to_num( Akima1DInterpolator(r_ext, field_tr_angl_ext)(r_proj) )
             phase_loc = field_txy_angl - m * th_proj
             laser_txy.Field[it] += field_txy_abs * np.exp(1j * phase_loc)
 
     return laser_txy
+
+def unwrap2d_fast(arr_in):
+    arr = arr_in.copy()
+    Nx, Ny = arr.shape
+    Nx_mid, Ny_mid = Nx//2, Ny//2
+
+    # unwrap horizonal central slice
+    arr[Nx_mid-1:, Ny_mid] = np.unwrap(arr[Nx_mid-1:, Ny_mid])
+    arr[:Nx_mid, Ny_mid] = np.unwrap(arr[:Nx_mid, Ny_mid][::-1])[::-1]
+
+    # unwrap both sides vertically
+    arr[:, :Ny_mid] = np.unwrap(arr[:, :Ny_mid][:,::-1], axis=-1)[:,::-1]
+    arr[:, Ny_mid-1:] = np.unwrap(arr[:, Ny_mid-1:], axis=-1)
+
+    return arr
