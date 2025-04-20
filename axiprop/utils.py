@@ -272,12 +272,11 @@ def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
     else:
         dxy = dr
 
-    r = np.arange(0, rmax, dxy)
-    r += 0.5 * dxy
+    r = np.arange(0.5 * dxy, rmax, dxy)
     th = np.linspace(0, 2*np.pi, Nm_ext, endpoint=False)
 
     Nr = r.size
-    Nt = laser_txy.t.size
+    Nk = laser_txy.t.size
 
     xx_pg = r[None, :] * np.cos( th[:, None] )
     yy_pg = r[None, :] * np.sin( th[:, None] )
@@ -291,38 +290,29 @@ def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
         laser_mtr.append(
             ScalarFieldEnvelope(laser_txy.k0, t_axis=laser_txy.t) \
                 .import_field(
-                    np.zeros( (Nt, Nr), dtype=laser_txy.dtype),
+                    np.zeros( (Nk, Nr), dtype=laser_txy.dtype),
                     t_loc=laser_txy.t_loc,
                     r_axis=r
                 )
         )
 
-    for ik in range(Nt):
+    for ik in range(Nk):
         E_slice = laser_txy.Field_ft[ik]
 
         E_slice_abs = np.abs(E_slice)
         E_slice_angl = unwrap2d(np.angle(E_slice))
 
-        E_slice_abs_max = np.max(E_slice_abs)
-        E_slice_angl_max = np.max(E_slice_angl)
-
-        if E_slice_abs_max>0:
-            E_slice_abs /= E_slice_abs_max
-
-        if E_slice_angl_max>0:
-            E_slice_angl /= E_slice_angl_max
-
-        E_slice_comb = E_slice_abs + 1.0j * E_slice_angl
-
-        E_slice_comb_pg = RegularGridInterpolator(
-            (x,y), E_slice_comb, bounds_error=False,
+        E_slice_abs_pg = RegularGridInterpolator(
+            (x,y), E_slice_abs, bounds_error=False,
             fill_value=0.0, method='linear'
         )((xx_pg, yy_pg))
 
-        E_abs_pg = E_slice_abs_max * np.real(E_slice_comb_pg)
-        E_angl_pg = E_slice_angl_max * np.imag(E_slice_comb_pg)
+        E_slice_angl_pg = RegularGridInterpolator(
+            (x,y), E_slice_angl, bounds_error=False,
+            fill_value=0.0, method='linear'
+        )((xx_pg, yy_pg))
 
-        E_slice_pg = E_abs_pg * np.exp(1j * E_angl_pg)
+        E_slice_pg = E_slice_abs_pg * np.exp(1j * E_slice_angl_pg)
 
         E_slice_pg = np.fft.ifft(E_slice_pg, axis=0)
 
@@ -339,7 +329,14 @@ def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
 def mtr_to_txy(laser_mtr, m_axis, x, y ):
     k0 = laser_mtr[0].k0
     t_axis = laser_mtr[0].t
-    r = laser_mtr[0].r
+    r = laser_mtr[0].r.copy()
+
+    if r[0]>0.0:
+        r = np.r_[ [-r[0]], r ]
+        ext_axis = True
+    else:
+        ext_axis = False
+
     t_loc = laser_mtr[0].t_loc
     dtype = laser_mtr[0].dtype
 
@@ -366,12 +363,15 @@ def mtr_to_txy(laser_mtr, m_axis, x, y ):
         field_tr_angl = np.unwrap( np.angle(field_tr) )
 
         for it in range(laser_txy.t.size):
-            r_ext = np.r_[ [-r[0]], r ]
-            field_tr_abs_ext = np.r_[ field_tr_abs[it, 0], field_tr_abs[it]]
-            field_tr_angl_ext = np.r_[ field_tr_angl[it, 0], field_tr_angl[it]]
+            field_tr_abs_loc = field_tr_abs[it]
+            field_tr_angl_loc = field_tr_angl[it]
 
-            field_txy_abs = np.nan_to_num( Akima1DInterpolator(r_ext, field_tr_abs_ext)(r_proj) )
-            field_txy_angl = np.nan_to_num( Akima1DInterpolator(r_ext, field_tr_angl_ext)(r_proj) )
+            if ext_axis:
+                field_tr_abs_loc = np.r_[field_tr_abs_loc[0], field_tr_abs_loc]
+                field_tr_angl_loc = np.r_[field_tr_angl_loc[0], field_tr_angl_loc]
+
+            field_txy_abs = np.nan_to_num( Akima1DInterpolator(r, field_tr_abs_loc)(r_proj) )
+            field_txy_angl = np.nan_to_num( Akima1DInterpolator(r, field_tr_angl_loc)(r_proj) )
             phase_loc = field_txy_angl - m * th_proj
             laser_txy.Field[it] += field_txy_abs * np.exp(1j * phase_loc)
 
