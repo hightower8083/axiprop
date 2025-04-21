@@ -238,6 +238,9 @@ class CommonTools:
     def gather_on_r_new( self, u_loc_in, r_loc_in, r_new ):
 
         Nr_loc = ( r_loc_in < r_new.max() ).sum() + 1
+        if Nr_loc < 3:
+            Nr_loc = 3
+
         r_loc = r_loc_in[:Nr_loc]
         u_loc = u_loc_in[:Nr_loc]
 
