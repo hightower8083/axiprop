@@ -11,24 +11,26 @@ This file contains common classed of axiprop:
 import numpy as np
 from scipy.special import jn_zeros
 from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RegularGridInterpolator
 from scipy.interpolate import Akima1DInterpolator
 import os
 
 try:
-    from unwrap import unwrap as unwrap2d
+    from skimage.restoration import unwrap_phase as unwrap2d
     unwrap_available = True
 except Exception:
     unwrap_available = False
 
 if not unwrap_available:
     try:
-        from skimage.restoration import unwrap_phase as unwrap2d
+        from unwrap import unwrap as unwrap2d
         unwrap_available = True
     except Exception:
         unwrap_available = False
 
 from .backends import AVAILABLE_BACKENDS, backend_strings_ordered
 
+from .utils import unwrap2d_fast
 
 class CommonTools:
     """
@@ -237,7 +239,14 @@ class CommonTools:
         r = np.sqrt(r2)
         return x, y, r, r2
 
-    def gather_on_r_new( self, u_loc, r_loc, r_new ):
+    def gather_on_r_new( self, u_loc_in, r_loc_in, r_new ):
+
+        Nr_loc = ( r_loc_in < r_new.max() ).sum() + 1
+        if Nr_loc < 3:
+            Nr_loc = 3
+
+        r_loc = r_loc_in[:Nr_loc]
+        u_loc = u_loc_in[:Nr_loc]
 
         u_abs = np.abs(u_loc)
         u_angl = np.unwrap(np.angle(u_loc))
@@ -250,7 +259,7 @@ class CommonTools:
         )
 
         fu_new_angl = Akima1DInterpolator(
-            r_loc, u_angl,
+            r_loc, u_angl
         )
 
         u_new_abs = fu_new_abs(r_new)
@@ -266,17 +275,28 @@ class CommonTools:
 
         return u_new
 
-    def gather_on_xy_new( self, u_loc, r_loc, r_new ):
+    def gather_on_xy_new( self, u_loc_in, r_loc_in, r_new ):
 
         if not unwrap_available:
             raise NotImplementedError(
-                "install `unwrap` or `scikit-image` for this propagator")
+                "install `scikit-image` or `unwrap` for this propagator")
 
-        x_loc, y_loc = r_loc
+        x_loc_in, y_loc_in = r_loc_in
         x_new, y_new = r_new
-        if x_loc.size==x_new.size and y_loc.size==y_new.size:
-            if np.all(x_loc==x_new) and np.all(y_loc==y_new):
-                return u_loc
+
+        if x_loc_in.size==x_new.size and y_loc_in.size==y_new.size:
+            if np.all(x_loc_in==x_new) and np.all(y_loc_in==y_new):
+                return u_loc_in
+
+        ix_min = (x_loc_in<x_new.min()).sum()
+        ix_max = (x_loc_in<x_new.max()).sum() + 1
+
+        iy_min = (y_loc_in<=y_new.min()).sum()
+        iy_max = (y_loc_in<=y_new.max()).sum() + 1
+
+        x_loc = x_loc_in[ix_min:ix_max]
+        y_loc = y_loc_in[iy_min:iy_max]
+        u_loc = u_loc_in[ix_min:ix_max, iy_min:iy_max]
 
         fu_interp_abs = RectBivariateSpline(
             x_loc, y_loc, np.abs(u_loc),
@@ -284,7 +304,7 @@ class CommonTools:
         )
 
         fu_interp_angl = RectBivariateSpline(
-            x_loc, y_loc, unwrap2d(np.angle(u_loc)),
+            x_loc, y_loc, unwrap2d( np.angle(u_loc) ),
             kx=3, ky=3,
         )
 

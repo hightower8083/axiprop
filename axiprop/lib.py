@@ -713,6 +713,9 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
         x, y, r, r2 = self.init_xy_uniform( (Lx_ext, Nx_ext),
                                             (Ly_ext, Ny_ext) )
+
+        self.xmin_ext = x.min()
+        self.ymin_ext = y.min()
         self.init_kxy_uniform(x, y, shift=True)
         self.init_TST()
 
@@ -737,6 +740,12 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.fft2, ifft2, self.fftshift = self.bcknd.make_fft2(
                                                 self.u_iht, self.u_ht)
 
+        self.xy_init_phase = np.exp(
+            -1j * self.kx[:,None] * self.xmin_ext \
+            -1j * self.ky[None,:] * self.ymin_ext
+        )
+        self.xy_init_phase = self.bcknd.to_device(self.xy_init_phase)
+
     def TST(self):
         """
         Forward FFT transform.
@@ -744,14 +753,12 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.u_iht[:] = 0.0
         ix0, iy0 = self.ix0, self.iy0
         Nx, Ny = self.Nx, self.Ny
-
-        for ix_loc in range(Nx):
-            ix_glob = ix0 + ix_loc
-            self.u_iht[ix_glob, iy0 : iy0 + Ny] = self.u_loc[ix_loc,:]
+        self.u_iht[ix0 : ix0 + Nx, iy0 : iy0 + Ny] = self.u_loc.copy()
 
         self.u_ht = self.fft2(self.u_iht, self.u_ht)
         self.u_ht = self.fftshift(self.u_ht)
         self.u_ht *= self.dV
+        self.u_ht *= self.xy_init_phase
 
     def get_local_grid(self, dz, ikz):
         kz_loc = self.kz[ikz]

@@ -9,7 +9,23 @@ This file contains utility methods for Axiprop tool
 import numpy as np
 from scipy.constants import c
 from scipy.interpolate import Akima1DInterpolator
+from scipy.interpolate import RegularGridInterpolator
+
 from axiprop.containers import ScalarFieldEnvelope
+
+try:
+    from skimage.restoration import unwrap_phase as unwrap2d
+    unwrap_available = True
+except Exception:
+    unwrap_available = False
+
+if not unwrap_available:
+    try:
+        from unwrap import unwrap as unwrap2d
+        unwrap_available = True
+    except Exception:
+        unwrap_available = False
+
 
 # try import numba and make dummy methods if cannot
 try:
@@ -237,3 +253,141 @@ def export_to_lasy(Container, polarization=(1,0), dimensions='rt'):
     laser.grid.set_temporal_field(np.moveaxis(Container.Field, 0, -1)[None,...])
 
     return laser
+
+
+def txy_to_mtr(laser_txy, Nm, dr=None, Nm_ext=64 ):
+
+    x = laser_txy.x.copy()
+    y = laser_txy.y.copy()
+
+    rmax = np.max([
+        np.abs(x).max(), np.abs(y).max()
+    ])
+
+    if dr is None:
+        dxy = np.min([
+            np.ptp(x[[0,1]]),
+            np.ptp(y[[0,1]])
+        ])
+    else:
+        dxy = dr
+
+    r = np.arange(0.5 * dxy, rmax, dxy)
+    th = np.linspace(0, 2*np.pi, Nm_ext, endpoint=False)
+
+    Nr = r.size
+    Nk = laser_txy.t.size
+
+    xx_pg = r[None, :] * np.cos( th[:, None] )
+    yy_pg = r[None, :] * np.sin( th[:, None] )
+
+    m_axis_ext =  (Nm_ext * np.fft.fftfreq(Nm_ext)).astype(np.int64)
+    m_axis = (Nm * np.fft.fftfreq(Nm)).astype(np.int64)
+
+    laser_mtr = []
+
+    for im, m in enumerate(m_axis):
+        laser_mtr.append(
+            ScalarFieldEnvelope(laser_txy.k0, t_axis=laser_txy.t) \
+                .import_field(
+                    np.zeros( (Nk, Nr), dtype=laser_txy.dtype),
+                    t_loc=laser_txy.t_loc,
+                    r_axis=r
+                )
+        )
+
+    for ik in range(Nk):
+        E_slice = laser_txy.Field_ft[ik]
+
+        E_slice_abs = np.abs(E_slice)
+        E_slice_angl = unwrap2d(np.angle(E_slice))
+
+        E_slice_abs_pg = RegularGridInterpolator(
+            (x,y), E_slice_abs, bounds_error=False,
+            fill_value=0.0, method='linear'
+        )((xx_pg, yy_pg))
+
+        E_slice_angl_pg = RegularGridInterpolator(
+            (x,y), E_slice_angl, bounds_error=False,
+            fill_value=0.0, method='linear'
+        )((xx_pg, yy_pg))
+
+        E_slice_pg = E_slice_abs_pg * np.exp(1j * E_slice_angl_pg)
+
+        E_slice_pg = np.fft.ifft(E_slice_pg, axis=0)
+
+        for im, m in enumerate(m_axis):
+            im_ext = np.argwhere(m_axis_ext==m).flatten()[0]
+            laser_mtr[im].Field_ft[ik] = E_slice_pg[im_ext]
+
+    for im, m in enumerate(m_axis):
+        laser_mtr[im].frequency_to_time()
+
+    return laser_mtr, m_axis
+
+
+def mtr_to_txy(laser_mtr, m_axis, x, y ):
+    k0 = laser_mtr[0].k0
+    t_axis = laser_mtr[0].t
+    r = laser_mtr[0].r.copy()
+
+    if r[0]>0.0:
+        r = np.r_[ [-r[0]], r ]
+        ext_axis = True
+    else:
+        ext_axis = False
+
+    t_loc = laser_mtr[0].t_loc
+    dtype = laser_mtr[0].dtype
+
+    Nm = m_axis.size
+    Nx = x.size
+    Ny = y.size
+    Nt = t_axis.size
+
+    r_proj = np.sqrt(x[:, None]**2 + y[None, :]**2)
+    th_proj = np.arctan2(y[None, :], x[:, None])
+
+    laser_txy = ScalarFieldEnvelope(
+        laser_mtr[0].k0, t_axis=laser_mtr[0].t
+    ).import_field(
+        np.zeros((Nt, Nx, Ny), dtype=dtype),
+        t_loc=t_loc,
+        r_axis=(r, x, y),
+        )
+
+    for im, m in enumerate(m_axis):
+        field_tr = laser_mtr[im].Field
+
+        field_tr_abs = np.abs(field_tr)
+        field_tr_angl = np.unwrap( np.angle(field_tr) )
+
+        for it in range(laser_txy.t.size):
+            field_tr_abs_loc = field_tr_abs[it]
+            field_tr_angl_loc = field_tr_angl[it]
+
+            if ext_axis:
+                field_tr_abs_loc = np.r_[field_tr_abs_loc[0], field_tr_abs_loc]
+                field_tr_angl_loc = np.r_[field_tr_angl_loc[0], field_tr_angl_loc]
+
+            field_txy_abs = np.nan_to_num( Akima1DInterpolator(r, field_tr_abs_loc)(r_proj) )
+            field_txy_angl = np.nan_to_num( Akima1DInterpolator(r, field_tr_angl_loc)(r_proj) )
+            phase_loc = field_txy_angl - m * th_proj
+            laser_txy.Field[it] += field_txy_abs * np.exp(1j * phase_loc)
+
+    return laser_txy
+
+def unwrap2d_fast(arr_in):
+    arr = arr_in.copy()
+    Nx, Ny = arr.shape
+    Nx_mid, Ny_mid = Nx//2, Ny//2
+
+    # unwrap horizonal central slice
+    arr[Nx_mid-1:, Ny_mid] = np.unwrap(arr[Nx_mid-1:, Ny_mid])
+    arr[:Nx_mid, Ny_mid] = np.unwrap(arr[:Nx_mid, Ny_mid][::-1])[::-1]
+
+    # unwrap both sides vertically
+    arr[:, :Ny_mid] = np.unwrap(arr[:, :Ny_mid][:,::-1], axis=-1)[:,::-1]
+    arr[:, Ny_mid-1:] = np.unwrap(arr[:, Ny_mid-1:], axis=-1)
+
+    return arr

@@ -93,9 +93,13 @@ class ScalarFieldEnvelope:
             self.omega0 = k0 * c
 
             self.t = t_axis.copy()
-            self.dt = t_axis[1] - t_axis[0]
-            self.cdt = c * self.dt
             self.Nt = self.t.size
+            if self.Nt>1:
+                self.dt = t_axis[1] - t_axis[0]
+                self.cdt = c * self.dt
+            else:
+                self.dt = np.inf
+                self.cdt = np.inf
             self.t_loc = self.t[0]
 
             self.k_freq_base = 2 * np.pi * np.fft.fftfreq(self.Nt, c*self.dt)
