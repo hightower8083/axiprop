@@ -1,3 +1,4 @@
+
 # Copyright 2023
 # Authors: Igor A Andriyash
 # License: BSD-3-Clause
@@ -199,58 +200,94 @@ def import_from_lasy(laser):
     t_axis = laser.grid.axes[time_axis_indx]
 
     if laser.dim == "rt":
-        Container = []
+        Containers = []
+        r = laser.grid.axes[0]
+        field_3d = laser.grid.get_temporal_field()
+
         for i_m in range( laser.grid.azimuthal_modes.size ):
-            Container.append(
+            Containers.append(
                 ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-                    np.transpose(laser.grid.field[i_m]).copy()
+                    np.transpose(field_3d[i_m]),
+                    r_axis=r, make_copy=True, transform=True
                 )
             )
-    else:
+        Container = (Containers, laser.grid.azimuthal_modes)
+    elif laser.dim == 'xyt':
+        x, y = laser.grid.axes[0], laser.grid.axes[1]
+        r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
+
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-            np.moveaxis(laser.grid.field, 0, -1).copy()
+            np.moveaxis(laser.grid.get_temporal_field(), -1, 0),
+            r_axis=(r,x,y), make_copy=True, transform=True
         )
 
     return Container
 
-def export_to_lasy(Container, polarization=(1,0), dimensions='rt'):
+def export_to_lasy(Container_in, laser_in=None, polarization=(1,0), dimensions='rt'):
     r"""
     Export field from the `container` to the `lasy` object
     """
-    try:
-        from lasy.laser import Laser
-        from lasy.profiles import CombinedLongitudinalTransverseProfile
-        from lasy.profiles.longitudinal.longitudinal_profile import LongitudinalProfile
-        from lasy.profiles.transverse.transverse_profile import TransverseProfile
-    except Exception:
-        print ( "Error: `lasy` is not installed" )
-        return None
 
-    wavelength = 2 * np.pi * c / Container.omega0
-    empty_longitudinal_profile = LongitudinalProfile(wavelength=wavelength)
-    empty_transverse_profile = TransverseProfile()
-    empty_profile = CombinedLongitudinalTransverseProfile(
-        wavelength=wavelength,
-        pol=polarization,
-        laser_energy=0.0,
-        long_profile=empty_longitudinal_profile,
-        trans_profile=empty_transverse_profile,
-    )
+    if laser_in is None:
+        try:
+            from lasy.laser import Laser
+            from lasy.profiles import CombinedLongitudinalTransverseProfile
+            from lasy.profiles.longitudinal.longitudinal_profile import LongitudinalProfile
+            from lasy.profiles.transverse.transverse_profile import TransverseProfile
+        except Exception:
+            print ( "Error: `lasy` is not installed" )
+            return None
+
+        if dimensions == 'rt':
+            Containers, m_axis = Container_in
+            Container = Containers[0]
+            n_azimuthal_modes = (m_axis.size + 1) // 2
+        elif dimensions == 'xyt':
+            Container = Container_in
+            n_azimuthal_modes = 1
+
+        wavelength = 2 * np.pi * c / Container.omega0
+        empty_longitudinal_profile = LongitudinalProfile(wavelength=wavelength)
+        empty_transverse_profile = TransverseProfile()
+        empty_profile = CombinedLongitudinalTransverseProfile(
+            wavelength=wavelength,
+            pol=polarization,
+            laser_energy=0.0,
+            long_profile=empty_longitudinal_profile,
+            trans_profile=empty_transverse_profile,
+        )
+
+        if dimensions == 'rt':
+            lo = ( Container.r.min(), Container.t.min() )
+            hi = ( Container.r.max(), Container.t.max() )
+            num_points = ( Container.r.size, Container.t.size )
+        elif dimensions == 'xyt':
+            lo = ( Container.x.min(), Container.y.min(), Container.t.min() )
+            hi = ( Container.x.max(), Container.y.max(), Container.t.max() )
+            num_points = ( Container.x.size, Container.y.size, Container.t.size )
+
+        laser = Laser(dimensions, lo, hi, num_points, empty_profile, n_azimuthal_modes=n_azimuthal_modes)
+    else:
+        laser = laser_in
 
     if dimensions == 'rt':
-        lo = ( Container.r.min(), Container.t.min() )
-        hi = ( Container.r.max(), Container.t.max() )
-        num_points = ( Container.r.size, Container.t.size )
+        assert (np.allclose(laser.grid.azimuthal_modes, m_axis))
+
+        field_3d = np.zeros_like(laser.grid.get_temporal_field())
+
+        for im in range(m_axis.size):
+            Container = Containers[im]
+
+            if not hasattr(Container, 'Field'):
+                Container.frequency_to_time()
+
+            field_3d[im] = np.moveaxis(Container.Field, 0, -1)
+        laser.grid.set_temporal_field(field_3d)
+
     elif dimensions == 'xyt':
-        lo = ( Container.x.min(), Container.y.min(), Container.t.min() )
-        hi = ( Container.x.min(), Container.y.min(), Container.t.max() )
-        num_points = ( Container.x.size, Container.y.size, Container.t.size )
+        laser.grid.set_temporal_field(np.moveaxis(Container.Field, 0, -1))
 
-    if not hasattr(Container, 'Field'):
-        Container.frequency_to_time()
-
-    laser = Laser(dimensions, lo, hi, num_points, empty_profile)
-    laser.grid.set_temporal_field(np.moveaxis(Container.Field, 0, -1)[None,...])
+    laser.grid.temporal2spectral_fft()
 
     return laser
 
