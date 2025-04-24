@@ -621,6 +621,230 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
     """
 
     def __init__(self, x_axis, y_axis, kz_axis,
+                 dz, x_axis_new=None, y_axis_new=None,
+                 dtype=np.complex128,
+                 backend=None, verbose=True):
+        """
+        Construct the propagator.
+
+        Parameters
+        ----------
+        x_axis: tuple (Lx, Nx)
+          Define the x-axis grid with parameters:
+            Lx: float (m)
+                Full size of the calculation domain along x-axis.
+
+            Nx: int
+                Number of nodes of the x-grid. Better be an odd number,
+                in order to make a symmteric grid.
+
+        y_axis: tuple (Ly, Ny)
+          Define the y-axis grid with parameters:
+            Ly: float (m)
+                Full size of the calculation domain along y-axis.
+
+            Ny: int
+                Number of nodes of the y-grid.Better be an odd number,
+                in order to make a symmteric grid.
+
+        kz_axis: a tuple (k0, Lkz, Nkz) or a 1D numpy.array
+            When tuple is given the axis is created using:
+
+              k0: float (1/m)
+                Central wavenumber of the spectral domain.
+
+              Lkz: float (1/m)
+                Total spectral width in units of wavenumbers.
+
+              Nkz: int
+                Number of spectral modes (wavenumbers) to resolve the temporal
+                profile of the wave.
+
+        dtype: type (optional)
+            Data type to be used. Default is np.complex128.
+
+        backend: string
+            Backend to be used. See axiprop.backends.AVAILABLE_BACKENDS for the
+            list of available options.
+        """
+        self.dtype = dtype
+
+        self.init_backend(backend, verbose)
+        self.init_kz(kz_axis)
+        self.gather_on_new_grid = self.gather_on_xy_new
+
+        kz_max = self.kz.max()
+        kz_min = self.kz.min()
+        kz_mean = self.kz.mean()
+
+        if type(x_axis) is tuple and type(y_axis):
+            self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
+        else:
+            self.x0, self.y0, self.r, self.r2 = self.init_xy_sampled(x_axis, y_axis)
+
+        self.r2 = self.bcknd.to_device(self.r2)
+
+        Nx = self.x0.size
+        Ny = self.y0.size
+        Lx = np.ptp( self.x0 )
+        Ly = np.ptp( self.y0 )
+        dx0 = np.ptp(self.x0[[0,1]])
+        dy0 = np.ptp(self.y0[[0,1]])
+        x0_max = np.abs(self.x0).max()
+        y0_max = np.abs(self.y0).max()
+
+        if x_axis_new is None:
+            self.x = 2 * np.pi * dz / kz_mean / dx0 / Nx * (np.arange(Nx) - Nx//2)
+
+        if y_axis_new is None:
+            self.y = 2 * np.pi * dz / kz_mean / dy0 / Ny * (np.arange(Ny) - Ny//2)
+
+        if type(x_axis_new) is tuple and type(y_axis_new):
+            self.x, self.y, r_new, r2_new = self.init_xy_uniform(x_axis_new, y_axis_new)
+        elif type(x_axis_new) is np.ndarray and type(y_axis_new) is np.ndarray:
+            self.x, self.y, r_new, r2_new = self.init_xy_sampled(x_axis_new, y_axis_new)
+
+        dx = np.ptp(self.x[[0,1]])
+        dy = np.ptp(self.y[[0,1]])
+        x_max = np.abs(self.x).max()
+        y_max = np.abs(self.y).max()
+
+        if kz_min<0:
+            print('temporal resolution is too high, some data will be lost')
+
+        if np.mod(Nx, 2)==0:
+            fftfreq_coef_x = 1. - 1.0 / Nx
+        else:
+            fftfreq_coef_x = 1. - 2.0 / Nx
+
+        if np.mod(Ny, 2)==0:
+            fftfreq_coef_y = 1. - 1.0 / Ny
+        else:
+            fftfreq_coef_y = 1. - 2.0 / Ny
+
+        x_max_resolved = np.pi * fftfreq_coef_x * dz / dx0 / kz_max
+        y_max_resolved = np.pi * fftfreq_coef_y * dz / dy0 / kz_max
+
+        if x_max_resolved < x_max:
+            print('Requested x-axis is too large')
+        if y_max_resolved < y_max:
+            print('Requested y-axis is too large')
+
+        Nx_ext = int(np.ceil(2 * np.pi * dz / dx0 / dx / kz_mean)) # to consider `kz_min`
+        Ny_ext = int(np.ceil(2 * np.pi * dz / dy0 / dy / kz_mean)) # to consider `kz_min`
+
+        if Nx_ext < Nx:
+            Nx_ext = Nx
+            self.ix0 = 0
+        else:
+            self.ix0 = (Nx_ext - Nx) // 2
+
+        if Ny_ext < Ny:
+            Ny_ext = Ny
+            self.iy0 = 0
+        else:
+            self.iy0 = (Ny_ext - Ny) // 2
+
+        self.Nx = Nx
+        self.Ny = Ny
+        self.Nx_ext = Nx_ext
+        self.Ny_ext = Ny_ext
+
+        self.dV = dx0 * dy0
+
+        self.Nx_new = self.x.size
+        self.Ny_new = self.y.size
+
+        self.x0_ext = np.zeros(Nx_ext)
+        ix1 = self.ix0 + Nx
+        self.x0_ext[self.ix0 : ix1] = self.x0[:]
+
+        self.x0_ext[ix1:] = self.x0_ext[ix1-1] \
+            + dx0 * np.arange(1, Nx_ext - ix1 + 1)
+
+        self.x0_ext[:self.ix0] = self.x0_ext[self.ix0] \
+            - dx0 * np.arange(1, self.ix0 + 1)[::-1]
+
+        self.y0_ext = np.zeros(Ny_ext)
+        iy1 = self.iy0 + Ny
+        self.y0_ext[self.iy0 : iy1] = self.y0[:]
+
+        self.y0_ext[iy1:] = self.y0_ext[iy1-1] \
+            + dy0 * np.arange(1, Ny_ext - iy1 + 1)
+
+        self.y0_ext[:self.iy0] = self.y0_ext[self.iy0] \
+            - dy0 * np.arange(1, self.iy0 + 1)[::-1]
+
+        self.xmin_ext = self.x0_ext.min()
+        self.ymin_ext = self.y0_ext.min()
+        self.init_kxy_uniform(self.x0_ext, self.y0_ext, shift=True)
+        self.init_TST()
+
+    def init_TST(self):
+        """
+        Setup data buffers for TST.
+        """
+        Nx = self.Nx
+        Ny = self.Ny
+        Nx_ext = self.Nx_ext
+        Ny_ext = self.Ny_ext
+        Nx_new = self.Nx_new
+        Ny_new = self.Ny_new
+        dtype = self.dtype
+
+        self.shape_trns_new = (Nx_new, Ny_new)
+        self.u_loc = self.bcknd.zeros((Nx, Ny), dtype)
+
+        self.u_iht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
+        self.u_ht = self.bcknd.zeros((Nx_ext, Ny_ext), dtype)
+
+        self.fft2, ifft2, self.fftshift = self.bcknd.make_fft2(
+                                                self.u_iht, self.u_ht)
+
+        self.xy_init_phase = np.exp(
+            -1j * self.kx[:,None] * self.xmin_ext \
+            -1j * self.ky[None,:] * self.ymin_ext
+        )
+        self.xy_init_phase = self.bcknd.to_device(self.xy_init_phase)
+
+    def TST(self):
+        """
+        Forward FFT transform.
+        """
+        self.u_iht[:] = 0.0
+        ix0, iy0 = self.ix0, self.iy0
+        Nx, Ny = self.Nx, self.Ny
+        self.u_iht[ix0 : ix0 + Nx, iy0 : iy0 + Ny] = self.u_loc.copy()
+
+        self.u_ht = self.fft2(self.u_iht, self.u_ht)
+        self.u_ht = self.fftshift(self.u_ht)
+        self.u_ht *= self.dV
+        self.u_ht *= self.xy_init_phase
+
+    def get_local_grid(self, dz, ikz):
+        kz_loc = self.kz[ikz]
+        x_loc = dz * self.kx / kz_loc
+        y_loc = dz * self.ky / kz_loc
+        r_loc = (x_loc, y_loc)
+        r2_loc = x_loc[:, None]**2 + y_loc[None, :]**2
+        return r_loc, r2_loc
+
+    def check_new_grid(self, dz):
+        self.r_new = (self.x, self.y)
+
+
+class PropagatorFFT2Fresnel_old(CommonTools, StepperFresnel):
+    """
+    Class for the propagator with two-dimensional Fast Fourier transform (FFT2)
+    for TST.
+
+    Contains methods to:
+    - setup TST data buffers;
+    - perform a forward FFT;
+    - perform a inverse FFT;
+    """
+
+    def __init__(self, x_axis, y_axis, kz_axis,
                  Nx_new=None, Ny_new=None,
                  N_pad=1, dtype=np.complex128,
                  backend=None, verbose=True):

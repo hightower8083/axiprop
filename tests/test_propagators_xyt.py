@@ -21,20 +21,24 @@ def container_env():
     t_axis = np.linspace( -3.5 * tau, 3.5 * tau, Nt )
     return ContainerEnv(k0, t_axis)
 
-def propagator_fft2_fresnel(container):
-    Nx = 256
-    Ny = 258
+def propagator_fft2_fresnel(container, dz):
+    Nx = 128
+    Ny = 129
     Lxy = 5 * R_las
+
+    Nx_new = 32
+    Ny_new = 33
+    Lxy_new = 5 * w0
     return PropagatorFFT2Fresnel(
         x_axis=(Lxy, Nx),
         y_axis=(Lxy, Ny),
-        Nx_new=Nx,
-        Ny_new=Ny,
+        dz=dz,
+        x_axis_new=(Lxy_new, Nx_new),
+        y_axis_new=(Lxy_new, Ny_new),
         kz_axis=container().k_freq,
-        N_pad=2,
         )
 
-def propagator_fft2(container):
+def propagator_fft2(container, dz):
     Nx = 1024
     Ny = 1028
     Lxy = 5 * R_las
@@ -73,7 +77,7 @@ def test_propagate():
                 propagator_fft2_fresnel,
                 propagator_fft2,
             ]:
-            prop = propagator_method(container)
+            prop = propagator_method(container, f0)
             if hasattr(prop, 'x0'):
                 LaserObject = gaussian_xyt(container(), (prop.r, prop.x0, prop.y0))
             else:

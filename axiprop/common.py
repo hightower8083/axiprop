@@ -192,9 +192,6 @@ class CommonTools:
         r += 0.5 * dr
         return r, Rmax, Nr
 
-    def check_uniform(self, r):
-        return np.allclose( np.diff(r), np.diff(r).mean())
-
     def init_xy_uniform(self, x_axis, y_axis):
         """
         Setup the transverse `x` and `y` grids
@@ -239,6 +236,24 @@ class CommonTools:
         r = np.sqrt(r2)
         return x, y, r, r2
 
+    def init_xy_sampled(self, x_axis, y_axis):
+        """
+        Setup the radial `x` and `y` grids from arrays
+
+        Parameters
+        ----------
+        x_axis: float ndarray (m)
+        y_axis: float ndarray (m)
+        """
+        x = x_axis.copy()
+        y = y_axis.copy()
+        r2 = x[:,None]**2 + y[None,:]**2
+        r = np.sqrt(r2)
+        return x, y, r, r2
+
+    def check_uniform(self, r):
+        return np.allclose( np.diff(r), np.diff(r).mean())
+
     def gather_on_r_new( self, u_loc_in, r_loc_in, r_new ):
 
         Nr_loc = ( r_loc_in < r_new.max() ).sum() + 1
@@ -247,6 +262,13 @@ class CommonTools:
 
         r_loc = r_loc_in[:Nr_loc]
         u_loc = u_loc_in[:Nr_loc]
+
+        if r_loc[0] > 0:
+            r_loc = np.r_[-r_loc[0], r_loc]
+            if np.abs(self.mode)>0:
+                u_loc = np.r_[-u_loc[0], u_loc]
+            else:
+                u_loc = np.r_[u_loc[0], u_loc]
 
         u_abs = np.abs(u_loc)
         u_angl = np.unwrap(np.angle(u_loc))
