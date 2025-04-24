@@ -41,10 +41,9 @@ def propagator_symmetric(container):
 def propagator_resample_fresnel(container):
     Nr0 = 512
     Nr1 = 128
-    N_pad = 2
     return PropagatorResamplingFresnel(
         r_axis=(R0, Nr0), kz_axis=container().k_freq,
-        r_axis_new=(R1, Nr1), N_pad=N_pad,
+        dz=f0, r_axis_new=(R1, Nr1)
     )
 
 def container_env():
