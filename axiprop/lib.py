@@ -443,9 +443,9 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
 
 
 class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
-    def __init__(self, r_axis, kz_axis,
-                 r_axis_new=None, Nkr_new=None,
-                 N_pad=1, mode=0, dtype=np.complex128,
+    def __init__(self, r_axis, kz_axis, dz,
+                 r_axis_new=None, mode=0,
+                 dtype=np.complex128,
                  backend=None, verbose=True):
         """
         The resampling RT propagator.
@@ -488,51 +488,46 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
 
+        kz_max = self.kz.max()
+        kz_min = self.kz.min()
+        kz_mean = self.kz.mean()
+        if kz_min<0:
+            print('temporal resolution is too high, some data will be lost')
+
         if type(r_axis) is tuple:
             Rmax, Nr = r_axis
-            self.Nr = Nr
-            Nr_ext_loc = int( np.round( N_pad * Nr  ) )
-            r_axis_ext = ( N_pad * Rmax, Nr_ext_loc )
-            self.r_ext, self.Rmax_ext, self.Nr_ext = \
-                            self.init_r_uniform(r_axis_ext)
-
-            self.r = self.r_ext[:Nr]
+            self.r, self.Rmax, self.Nr = self.init_r_uniform(r_axis)
             dr_est = (self.r[1:] - self.r[:-1]).mean()
-            Rmax = self.r.max()
-            self.Rmax = Rmax + 0.5 * dr_est
         else:
             self.r = r_axis.copy()
-            Nr = self.r.size
-            self.Nr = Nr
+            self.Nr = self.r.size
             dr_est = (self.r[1:] - self.r[:-1]).mean()
-            Rmax = self.r.max()
-            self.Rmax = Rmax + 0.5 * dr_est
-            Nr_ext_add = int( np.round(  Nr*(N_pad-1) ) )
+            self.Rmax = self.r.max() + 0.5 * dr_est
 
-            self.r_ext = np.r_[ self.r,
-                Rmax + dr_est * np.arange( 1, Nr_ext_add)
-            ]
-            self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
-            self.Nr_ext = self.r_ext.size
-
-        if Nkr_new is None:
-            self.Nkr_new = self.Nr_ext
+        if type(r_axis_new) is tuple:
+            Rmax_new, Nr_new = r_axis_new
+            self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
+            dr_new_est = (self.r_new[1:] - self.r_new[:-1]).mean()
         else:
-            self.Nkr_new = Nkr_new
-            if Nkr_new > Nr * N_pad:
-                warnings.warn(f"Nkr_new>Nr*N_pad={Nr*int(N_pad)} has no effect")
+            self.r_new = r_axis_new.copy()
+            self.Nr_new = self.r.size
+            dr_new_est = (self.r_new[1:] - self.r_new[:-1]).mean()
+            self.Rmax_new = self.r_new.max() + 0.5 * dr_new_est
 
-        if r_axis_new is None:
-            self.Nr_new = self.Nkr_new
-        elif type(r_axis_new) is tuple:
-            self.r_new, self.Rmax_new, self.Nr_new = \
-                self.init_r_uniform(r_axis_new)
-        else:
-            self.r_new, self.Rmax_new, self.Nr_new = \
-                self.init_r_sampled(r_axis_new)
+        Rmax_resolved = np.pi * dz / kz_max / dr_est
+        if Rmax_resolved < self.Rmax_new:
+            print('Requested x-axis is too large')
+
+        self.Nr_ext = int(np.ceil( np.pi * dz / kz_max / dr_est / dr_new_est  ))
+        self.r_ext = np.zeros(self.Nr_ext)
+        self.r_ext[:self.Nr] = self.r[:]
+        self.r_ext[self.Nr:] = self.r[-1] \
+            + dr_est * np.arange(1, self.Nr_ext - self.Nr + 1)
+        self.Rmax_ext = self.r_ext.max() + 0.5 * dr_est
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
+
         self.init_TST()
 
     def init_TST(self):
@@ -550,7 +545,10 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         Nr = self.Nr
 
         Nr_new = self.Nr_new
-        Nkr_new = self.Nkr_new
+        Nkr_new = Nr_new
+
+        self.Nkr_new = Nkr_new
+
         alpha = self.alpha
         kr = self.kr
 
@@ -621,8 +619,8 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
     """
 
     def __init__(self, x_axis, y_axis, kz_axis,
-                 Nx_new=None, Ny_new=None,
-                 N_pad=1, dtype=np.complex128,
+                 dz, x_axis_new=None, y_axis_new=None,
+                 dtype=np.complex128,
                  backend=None, verbose=True):
         """
         Construct the propagator.
@@ -673,50 +671,111 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         self.init_kz(kz_axis)
         self.gather_on_new_grid = self.gather_on_xy_new
 
-        Lx, Nx = x_axis
-        Ly, Ny = y_axis
+        kz_max = self.kz.max()
+        kz_min = self.kz.min()
+        kz_mean = self.kz.mean()
 
-        Lx_ext = N_pad * Lx
-        Ly_ext = N_pad * Ly
-        Nx_ext = int( np.round(N_pad * Nx ))
-        Ny_ext = int( np.round( N_pad * Ny ))
+        if type(x_axis) is tuple and type(y_axis):
+            self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
+        else:
+            self.x0, self.y0, self.r, self.r2 = self.init_xy_sampled(x_axis, y_axis)
+
+        self.r2 = self.bcknd.to_device(self.r2)
+
+        Nx = self.x0.size
+        Ny = self.y0.size
+        Lx = np.ptp( self.x0 )
+        Ly = np.ptp( self.y0 )
+        dx0 = np.ptp(self.x0[[0,1]])
+        dy0 = np.ptp(self.y0[[0,1]])
+        x0_max = np.abs(self.x0).max()
+        y0_max = np.abs(self.y0).max()
+
+        if x_axis_new is None:
+            self.x = 2 * np.pi * dz / kz_mean / dx0 / Nx * (np.arange(Nx) - Nx//2)
+
+        if y_axis_new is None:
+            self.y = 2 * np.pi * dz / kz_mean / dy0 / Ny * (np.arange(Ny) - Ny//2)
+
+        if type(x_axis_new) is tuple and type(y_axis_new):
+            self.x, self.y, r_new, r2_new = self.init_xy_uniform(x_axis_new, y_axis_new)
+        elif type(x_axis_new) is np.ndarray and type(y_axis_new) is np.ndarray:
+            self.x, self.y, r_new, r2_new = self.init_xy_sampled(x_axis_new, y_axis_new)
+
+        dx = np.ptp(self.x[[0,1]])
+        dy = np.ptp(self.y[[0,1]])
+        x_max = np.abs(self.x).max()
+        y_max = np.abs(self.y).max()
+
+        if kz_min<0:
+            print('temporal resolution is too high, some data will be lost')
+
+        if np.mod(Nx, 2)==0:
+            fftfreq_coef_x = 1. - 1.0 / Nx
+        else:
+            fftfreq_coef_x = 1. - 2.0 / Nx
+
+        if np.mod(Ny, 2)==0:
+            fftfreq_coef_y = 1. - 1.0 / Ny
+        else:
+            fftfreq_coef_y = 1. - 2.0 / Ny
+
+        x_max_resolved = np.pi * fftfreq_coef_x * dz / dx0 / kz_max
+        y_max_resolved = np.pi * fftfreq_coef_y * dz / dy0 / kz_max
+
+        if x_max_resolved < x_max:
+            print('Requested x-axis is too large')
+        if y_max_resolved < y_max:
+            print('Requested y-axis is too large')
+
+        Nx_ext = int(np.ceil(2 * np.pi * dz / dx0 / dx / kz_mean)) # to consider `kz_min`
+        Ny_ext = int(np.ceil(2 * np.pi * dz / dy0 / dy / kz_mean)) # to consider `kz_min`
+
+        if Nx_ext < Nx:
+            Nx_ext = Nx
+            self.ix0 = 0
+        else:
+            self.ix0 = (Nx_ext - Nx) // 2
+
+        if Ny_ext < Ny:
+            Ny_ext = Ny
+            self.iy0 = 0
+        else:
+            self.iy0 = (Ny_ext - Ny) // 2
 
         self.Nx = Nx
         self.Ny = Ny
         self.Nx_ext = Nx_ext
         self.Ny_ext = Ny_ext
-        self.dV = Lx/Nx * Ly/Ny
 
-        if Nx_new is None:
-            self.Nx_new = Nx_ext
-        else:
-            if Nx_new <= Nx_ext:
-                self.Nx_new = Nx_new
-            else:
-                warnings.warn("Nx_new>Nx*N_pad will be reduced")
-                self.Nx_new = Nx_ext
+        self.dV = dx0 * dy0
 
-        if Ny_new is None:
-            self.Ny_new = Ny_ext
-        else:
-            if Ny_new <= Ny_ext:
-                self.Ny_new = Ny_new
-            else:
-                warnings.warn("Ny_new>Ny*N_pad will be reduced")
-                self.Ny_new = Ny_ext
+        self.Nx_new = self.x.size
+        self.Ny_new = self.y.size
 
-        self.ix0 = int( np.round( (N_pad - 1) * Nx / 2. ) )
-        self.iy0 = int( np.round( (N_pad - 1) * Ny / 2. ) )
+        self.x0_ext = np.zeros(Nx_ext)
+        ix1 = self.ix0 + Nx
+        self.x0_ext[self.ix0 : ix1] = self.x0[:]
 
-        self.x0, self.y0, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
-        self.r2 = self.bcknd.to_device(self.r2)
+        self.x0_ext[ix1:] = self.x0_ext[ix1-1] \
+            + dx0 * np.arange(1, Nx_ext - ix1 + 1)
 
-        x, y, r, r2 = self.init_xy_uniform( (Lx_ext, Nx_ext),
-                                            (Ly_ext, Ny_ext) )
+        self.x0_ext[:self.ix0] = self.x0_ext[self.ix0] \
+            - dx0 * np.arange(1, self.ix0 + 1)[::-1]
 
-        self.xmin_ext = x.min()
-        self.ymin_ext = y.min()
-        self.init_kxy_uniform(x, y, shift=True)
+        self.y0_ext = np.zeros(Ny_ext)
+        iy1 = self.iy0 + Ny
+        self.y0_ext[self.iy0 : iy1] = self.y0[:]
+
+        self.y0_ext[iy1:] = self.y0_ext[iy1-1] \
+            + dy0 * np.arange(1, Ny_ext - iy1 + 1)
+
+        self.y0_ext[:self.iy0] = self.y0_ext[self.iy0] \
+            - dy0 * np.arange(1, self.iy0 + 1)[::-1]
+
+        self.xmin_ext = self.x0_ext.min()
+        self.ymin_ext = self.y0_ext.min()
+        self.init_kxy_uniform(self.x0_ext, self.y0_ext, shift=True)
         self.init_TST()
 
     def init_TST(self):
@@ -769,14 +828,4 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
         return r_loc, r2_loc
 
     def check_new_grid(self, dz):
-        Nx_ext = self.Nx_ext
-        Ny_ext = self.Ny_ext
-        Nx_new = self.Nx_new
-        Ny_new = self.Ny_new
-
-        ix0 = (Nx_ext - Nx_new) // 2
-        iy0 = (Ny_ext - Ny_new) // 2
-        kz_max = self.kz.max()
-        self.x = dz * self.kx[ix0 : ix0 + Nx_new] / kz_max
-        self.y = dz * self.ky[iy0 : iy0 + Ny_new] / kz_max
         self.r_new = (self.x, self.y)
