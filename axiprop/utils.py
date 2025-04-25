@@ -251,7 +251,7 @@ def import_from_lasy(laser):
         r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
 
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-            np.moveaxis(field_ft_3d, -1, 0),
+            np.moveaxis(field_3d, -1, 0),
             r_axis=(r,x,y), make_copy=True, transform=True
         )
 
