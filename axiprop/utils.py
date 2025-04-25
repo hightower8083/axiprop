@@ -191,6 +191,39 @@ def mirror_parabolic(f0, kz, r):
                  ( kz * np.ones((*kz.shape, *r.shape)).T ).T)
     return val
 
+def import_from_lasy_ft(laser):
+    r"""
+    Extract field from `lasy` object and import it to a `container` object or list
+    """
+    time_axis_indx = -1
+    omega0 = laser.profile.omega0
+    t_axis = laser.grid.axes[time_axis_indx]
+
+    field_ft_3d, omega_axis = laser.grid.get_spectral_field()
+
+    if laser.dim == "rt":
+        Containers = []
+        for i_m in range( laser.grid.azimuthal_modes.size ):
+            Containers.append(
+                ScalarFieldEnvelope(omega0 / c, t_axis) \
+                    .import_field_ft(
+                        np.transpose(field_ft_3d[i_m]),
+                        r_axis=laser.grid.axes[0],
+                        make_copy=True, transform=False
+                    )
+            )
+        Container = (Containers, laser.grid.azimuthal_modes)
+    elif laser.dim == 'xyt':
+        x, y = laser.grid.axes[0], laser.grid.axes[1]
+        r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
+
+        Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field_ft(
+            np.moveaxis(field_ft_3d, -1, 0),
+            r_axis=(r,x,y), make_copy=True, transform=False
+        )
+
+    return Container
+
 def import_from_lasy(laser):
     r"""
     Extract field from `lasy` object and import it to a `container` object or list
@@ -199,17 +232,18 @@ def import_from_lasy(laser):
     omega0 = laser.profile.omega0
     t_axis = laser.grid.axes[time_axis_indx]
 
+    field_3d = laser.grid.get_temporal_field()
+
     if laser.dim == "rt":
         Containers = []
-        r = laser.grid.axes[0]
-        field_3d = laser.grid.get_temporal_field()
-
         for i_m in range( laser.grid.azimuthal_modes.size ):
             Containers.append(
-                ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-                    np.transpose(field_3d[i_m]),
-                    r_axis=r, make_copy=True, transform=True
-                )
+                ScalarFieldEnvelope(omega0 / c, t_axis) \
+                    .import_field(
+                        np.transpose(field_3d[i_m]),
+                        r_axis=laser.grid.axes[0],
+                        make_copy=True, transform=True
+                    )
             )
         Container = (Containers, laser.grid.azimuthal_modes)
     elif laser.dim == 'xyt':
@@ -217,7 +251,7 @@ def import_from_lasy(laser):
         r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
 
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
-            np.moveaxis(laser.grid.get_temporal_field(), -1, 0),
+            np.moveaxis(field_ft_3d, -1, 0),
             r_axis=(r,x,y), make_copy=True, transform=True
         )
 
