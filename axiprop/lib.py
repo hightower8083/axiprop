@@ -408,7 +408,13 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
 
         self.init_backend(backend, verbose)
         self.init_kz(kz_axis)
-        self.x, self.y, self.r, self.r2 = self.init_xy_uniform(x_axis, y_axis)
+        if type(x_axis) and type(y_axis) in (list, tuple):
+            self.x, self.y, self.r, self.r2 = self.init_xy_uniform(
+                                                x_axis, y_axis)
+        elif type(x_axis) and type(y_axis) is np.ndarray:
+            self.x, self.y, self.r, self.r2 = self.init_xy_sampled(
+                                                x_axis, y_axis)
+
         self.init_kxy_uniform(self.x, self.y)
         self.init_TST()
 
