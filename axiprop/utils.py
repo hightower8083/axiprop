@@ -1,4 +1,3 @@
-
 # Copyright 2023
 # Authors: Igor A Andriyash
 # License: BSD-3-Clause
@@ -7,6 +6,7 @@ Axiprop utils file
 
 This file contains utility methods for Axiprop tool
 """
+
 import numpy as np
 from scipy.constants import c
 from scipy.interpolate import Akima1DInterpolator
@@ -220,6 +220,39 @@ def import_from_lasy_ft(laser):
         Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field_ft(
             np.moveaxis(field_ft_3d, -1, 0),
             r_axis=(r,x,y), make_copy=True, transform=False
+        )
+
+    return Container
+
+def import_from_lasy_grid(grid, dim, omega0):
+    r"""
+    Extract field from `lasy` object and import it to a `container` object or list
+    """
+    time_axis_indx = -1
+    t_axis = grid.axes[time_axis_indx]
+
+    field_3d = grid.get_temporal_field()
+
+    if dim == "rt":
+        Containers = []
+        for i_m in range( grid.azimuthal_modes.size ):
+            Containers.append(
+                ScalarFieldEnvelope(omega0 / c, t_axis) \
+                    .import_field(
+                        np.transpose(field_3d[i_m]),
+                        r_axis=grid.axes[0],
+                        make_copy=True, transform=True
+                    )
+            )
+        Container = (Containers, grid.azimuthal_modes)
+    elif dim == 'xyt':
+        x, y = grid.axes[0], grid.axes[1]
+        r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
+
+        Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+            np.moveaxis(field_3d, -1, 0),
+            r_axis=(r, x, y), make_copy=True,
+            transform=True
         )
 
     return Container
