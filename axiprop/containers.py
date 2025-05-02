@@ -65,7 +65,7 @@ class ScalarFieldEnvelope:
     between temporal and frequency domains.
     """
     def __init__(
-        self, k0=None, t_axis=None, n_dump=0, dtype=np.complex128, file_name=None
+        self, k0=None, t_axis=None, n_dump_r=0, n_dump_t=0, dtype=np.complex128, file_name=None
     ):
         """
         Initialize the container for the field.
@@ -78,8 +78,11 @@ class ScalarFieldEnvelope:
         t_axis: 1d ndarray (s)
             Temporal grid of the initial temporal domain
 
-        n_dump: int
-            Number of cells to be used for attenuating boundaries
+        n_dump_r: int
+            Number of cells to be used for attenuating transverse boundaries
+
+        n_dump_t: int
+            Number of cells to be used for attenuating temporal boundaries
         """
         self.dtype = dtype
 
@@ -108,9 +111,13 @@ class ScalarFieldEnvelope:
             self.Nk_freq = self.k_freq.size
             self.omega = self.k_freq * c
 
-            self.n_dump = n_dump
-            r_dump = np.linspace(0, 1, n_dump)
-            self.dump_mask = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+            self.n_dump_r = n_dump_r
+            r_dump = np.linspace(0, 1, n_dump_r)
+            self.dump_mask_r = ( 1 - np.exp(-(2 * r_dump)**3) )[::-1]
+
+            self.n_dump_t = n_dump_t
+            t_dump = np.linspace(0, 1, n_dump_t)
+            self.dump_mask_t = ( 1 - np.exp(-(2 * t_dump)**3) )[::-1]
         else:
             print ('Either `k0` and `t_axis` or `file_name` should be provided')
 
@@ -192,8 +199,8 @@ class ScalarFieldEnvelope:
         self.Field = ( E0 * profile_t * profile_r[None,:] ) \
                         .astype(self.dtype)
 
-        self.Field = apply_boundary_t(self.Field, self.dump_mask)
-        self.Field = apply_boundary_r(self.Field, self.dump_mask)
+        self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
+        self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
 
         if Energy is not None:
             self.Field *= ( Energy / self.Energy ) ** 0.5
@@ -367,9 +374,10 @@ class ScalarFieldEnvelope:
 
         self.r_shape = Field[0].shape
 
+        self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
+        self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
+
         if transform:
-            self.Field = apply_boundary_t(self.Field, self.dump_mask)
-            self.Field = apply_boundary_r(self.Field, self.dump_mask)
             self.time_to_frequency()
 
         return self
@@ -424,10 +432,11 @@ class ScalarFieldEnvelope:
 
         if transform:
             self.frequency_to_time()
-            if clean_boundaries:
-                self.Field = apply_boundary_t(self.Field, self.dump_mask)
-                self.Field = apply_boundary_r(self.Field, self.dump_mask)
-                self.time_to_frequency()
+
+        if clean_boundaries:
+            self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
+            self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
+            self.time_to_frequency()
 
         return self
 

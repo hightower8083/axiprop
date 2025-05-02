@@ -224,7 +224,7 @@ def import_from_lasy_ft(laser):
 
     return Container
 
-def import_from_lasy_grid(grid, dim, omega0):
+def import_from_lasy_grid(grid, dim, omega0, nr_boundary):
     r"""
     Extract field from `lasy` object and import it to a `container` object or list
     """
@@ -237,7 +237,7 @@ def import_from_lasy_grid(grid, dim, omega0):
         Containers = []
         for i_m in range( grid.azimuthal_modes.size ):
             Containers.append(
-                ScalarFieldEnvelope(omega0 / c, t_axis) \
+                ScalarFieldEnvelope(omega0 / c, t_axis, nr_boundary) \
                     .import_field(
                         np.transpose(field_3d[i_m]),
                         r_axis=grid.axes[0],
@@ -249,7 +249,7 @@ def import_from_lasy_grid(grid, dim, omega0):
         x, y = grid.axes[0], grid.axes[1]
         r = np.sqrt( (x*x)[:,None] + (y*y)[None,:] )
 
-        Container = ScalarFieldEnvelope(omega0 / c, t_axis).import_field(
+        Container = ScalarFieldEnvelope(omega0 / c, t_axis, nr_boundary).import_field(
             np.moveaxis(field_3d, -1, 0),
             r_axis=(r, x, y), make_copy=True,
             transform=True
