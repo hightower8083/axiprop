@@ -516,7 +516,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             dr_new_est = (self.r_new[1:] - self.r_new[:-1]).mean()
         else:
             self.r_new = r_axis_new.copy()
-            self.Nr_new = self.r.size
+            self.Nr_new = self.r_new.size
             dr_new_est = (self.r_new[1:] - self.r_new[:-1]).mean()
             self.Rmax_new = self.r_new.max() + 0.5 * dr_new_est
 
