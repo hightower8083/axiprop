@@ -2,13 +2,13 @@ import numpy as np
 from numba import jit, prange
 from scipy.constants import e, m_e, c
 
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True)
 def wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax):
     dxi = xi_ax[1] - xi_ax[0]
-    for it in prange(xi_ax.size):
+    for it in range(xi_ax.size):
         xi = xi_ax[it]
         delta_n[it] = dxi * np.sum(
-            kernel_t[:it] * np.sin( k_p * ( xi - xi_ax[:it, None] ) ),
+            kernel_t[:it] * np.sin( k_p * (xi - xi_ax[:it, None]) ),
             axis=0
         )
     return delta_n
