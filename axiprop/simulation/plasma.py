@@ -8,13 +8,15 @@ from mendeleev import element as table_element
 
 from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d, refine1d_TR
-from .ionization_inline import get_plasma_ADK
-from .ionization_inline import get_plasma_ADK_ref
-from .ionization_inline import get_OFI_heating
-
+from .inline_methods import get_plasma_ADK
+from .inline_methods import get_plasma_ADK_ref
+from .inline_methods import get_OFI_heating
+from .inline_methods import wake_kernel_integrate
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
 mc_m2 = 1. / ( m_e * c )**2
+e_mc = e / m_e / c
+
 omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
@@ -116,6 +118,51 @@ class PlasmaRelativistic:
         Jp_ts *= self.coef_RHS
 
         return Jp_ts
+
+    def get_density(self, E_loc ):
+        sim = self.sim
+        prop = self.sim.prop
+        n_pe = self.n_pe
+        k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
+
+        k_env = ScalarFieldEnvelope(*sim.EnvArgs).k_freq_base
+        laplacian_ts = -( k_env[:, None]**2 + prop.kr[None,:]**2)
+        laplacian_ts = prop.bcknd.to_device(laplacian_ts)
+
+        A_loc = -1j * prop.omega_inv * e_mc * E_loc
+        A_loc *= (prop.kz[:, None]>0.0)
+
+        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_loc_obj.t += sim.dt_shift
+        A_loc_obj.t_loc += sim.dt_shift
+        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
+
+        A2_loc_t = 0.5 * np.astype( np.abs(A_loc_t)**2, A_loc_t.dtype )
+
+        A2_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A2_obj.t += sim.dt_shift
+        A2_obj.t_loc += sim.dt_shift
+        A2_ft = A2_obj.import_field(A2_loc_t).Field_ft
+
+        A2_ts = prop.perform_transfer_TST( A2_ft )
+
+        kernel_ts = 0.5 / k_p * laplacian_ts *  A2_ts
+        kernel_ft = prop.perform_iTST_transfer(kernel_ts)
+
+        kernel_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        kernel_obj.t += sim.dt_shift
+        kernel_obj.t_loc += sim.dt_shift
+        kernel_t = kernel_obj.import_field_ft(kernel_ft).Field
+        kernel_t = np.abs(kernel_t)
+
+        xi_ax = c * kernel_obj.t.copy()
+
+        delta_n = np.zeros_like(kernel_t)
+        delta_n = wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax)
+
+        n_t = n_pe * ( 1 + delta_n )
+
+        return n_t
 
 
 class PlasmaIonization(PlasmaRelativistic):
