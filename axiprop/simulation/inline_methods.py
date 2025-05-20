@@ -2,16 +2,34 @@ import numpy as np
 from numba import jit, prange
 from scipy.constants import e, m_e, c
 
-@jit(nopython=True, cache=True, parallel=True)
 def wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax):
     dxi = xi_ax[1] - xi_ax[0]
-    for it in prange(1, xi_ax.size):
+    for it in range(1, xi_ax.size):
         xi = xi_ax[it]
         delta_n[it] = dxi * np.sum(
             kernel_t[:it] * np.sin( k_p * (xi - xi_ax[:it, None]) ),
             axis=0
         )
     return delta_n
+
+def laplacian_fd(A, xi_ax, r_ax):
+    r_inv = 1.0 / r_ax
+    dxi_inv = 1.0 / ( xi_ax[1] - xi_ax[0] )
+    dxi2_inv = dxi_inv * dxi_inv
+    dr_inv = 1.0 / ( r_ax[1] - r_ax[0] )
+    dr2_inv = dr_inv * dr_inv
+
+    nabla2_A = np.zeros_like(A)
+
+    nabla2_A[1:-1, 1:-1] = \
+        dxi2_inv * (A[2:, 1:-1] - 2* A[1:-1, 1:-1] + A[:-2, 1:-1]) \
+      + dr2_inv * (A[1:-1, 2:] - 2* A[1:-1, 1:-1] + A[1:-1, :-2,]) \
+      + r_inv[None, 1:-1] * 0.5 * dr_inv * (A[1:-1, 2:] - A[1:-1, :-2] )
+
+    nabla2_A[:,0] = nabla2_A[:,1]
+
+    return nabla2_A
+
 
 @jit(nopython=True, cache=True)
 def get_ADK_probability(E_fld, dt, adk_power, \

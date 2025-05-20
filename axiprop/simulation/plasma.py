@@ -12,6 +12,7 @@ from .inline_methods import get_plasma_ADK
 from .inline_methods import get_plasma_ADK_ref
 from .inline_methods import get_OFI_heating
 from .inline_methods import wake_kernel_integrate
+from .inline_methods import laplacian_fd
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
 mc_m2 = 1. / ( m_e * c )**2
@@ -123,46 +124,25 @@ class PlasmaRelativistic:
         sim = self.sim
         prop = self.sim.prop
         n_pe = self.n_pe
+        xi_ax = c * ScalarFieldEnvelope(*sim.EnvArgs).t
+        r_ax = prop.r_new
         k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
 
-        # normalized vector potential
+        # get normalized vector potential
         A_ft = -1j * prop.omega_inv * e_mc * E_ft
         A_ft *= (prop.kz[:, None]>0.0)
 
-        # from frequency to time
+        # bring from frequency to time domain
         A_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         A_obj.t += sim.dt_shift
         A_obj.t_loc += sim.dt_shift
         A_t = A_obj.import_field_ft(A_ft).Field
 
         # cycle-averaged square of normalized vector potential
-        A2_t = 0.5 * np.astype( np.abs(A_t)**2, A_t.dtype )
-
-        # from time to frequency
-        A2_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        A2_obj.t += sim.dt_shift
-        A2_obj.t_loc += sim.dt_shift
-        A2_ft = A2_obj.import_field(A2_t).Field_ft
-
-        # transverse spectral transform
-        A2_ts = prop.perform_transfer_TST( A2_ft )
-
-        # wakefield kernel (spectral calculation of Laplacian)
-        k_env = ScalarFieldEnvelope(*sim.EnvArgs).k_freq_base
-        laplacian_ts = -( k_env[:, None]**2 + prop.kr[None,:]**2 )
-        laplacian_ts = prop.bcknd.to_device(laplacian_ts)
-
-        kernel_ts = 0.5 / k_p * laplacian_ts *  A2_ts
-        kernel_ft = prop.perform_iTST_transfer(kernel_ts)
-
-        kernel_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        kernel_obj.t += sim.dt_shift
-        kernel_obj.t_loc += sim.dt_shift
-        kernel_t = kernel_obj.import_field_ft(kernel_ft).Field
-        kernel_t = np.abs(kernel_t)
+        A2_t = 0.5 * np.abs(A_t)**2
+        kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
 
         # do the integral
-        xi_ax = c * kernel_obj.t.copy()
         delta_n = np.zeros_like(kernel_t)
         delta_n = wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax)
 
