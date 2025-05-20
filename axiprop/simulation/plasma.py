@@ -143,8 +143,7 @@ class PlasmaRelativistic:
         kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
 
         # do the integral
-        delta_n = np.zeros_like(kernel_t)
-        delta_n = wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax)
+        delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
 
         n_t = n_pe * ( 1.0 + delta_n )
 

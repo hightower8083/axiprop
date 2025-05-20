@@ -2,7 +2,8 @@ import numpy as np
 from numba import jit, prange
 from scipy.constants import e, m_e, c
 
-def wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax):
+def wake_kernel_integrate(kernel_t, k_p, xi_ax):
+    delta_n = np.zeros_like(kernel_t)
     dxi = xi_ax[1] - xi_ax[0]
     for it in range(1, xi_ax.size):
         xi = xi_ax[it]
