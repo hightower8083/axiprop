@@ -8,13 +8,16 @@ from mendeleev import element as table_element
 
 from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d, refine1d_TR
-from .ionization_inline import get_plasma_ADK
-from .ionization_inline import get_plasma_ADK_ref
-from .ionization_inline import get_OFI_heating
-
+from .inline_methods import get_plasma_ADK
+from .inline_methods import get_plasma_ADK_ref
+from .inline_methods import get_OFI_heating
+from .inline_methods import wake_kernel_integrate
+from .inline_methods import laplacian_fd
 
 r_e = e**2 / m_e / c**2 / 4 / pi /epsilon_0
 mc_m2 = 1. / ( m_e * c )**2
+e_mc = e / m_e / c
+
 omega_a = fine_structure**3 * c / r_e
 Ea = m_e * c**2 / e * fine_structure**4 / r_e
 UH = table_element('H').ionenergies[1]
@@ -116,6 +119,35 @@ class PlasmaRelativistic:
         Jp_ts *= self.coef_RHS
 
         return Jp_ts
+
+    def get_density(self, E_ft ):
+        sim = self.sim
+        prop = self.sim.prop
+        n_pe = self.n_pe
+        xi_ax = c * ScalarFieldEnvelope(*sim.EnvArgs).t
+        r_ax = prop.r_new
+        k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
+
+        # get normalized vector potential
+        A_ft = -1j * prop.omega_inv * e_mc * E_ft
+        A_ft *= (prop.kz[:, None]>0.0)
+
+        # bring from frequency to time domain
+        A_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_obj.t += sim.dt_shift
+        A_obj.t_loc += sim.dt_shift
+        A_t = A_obj.import_field_ft(A_ft).Field
+
+        # cycle-averaged square of normalized vector potential
+        A2_t = 0.5 * np.abs(A_t)**2
+        kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
+
+        # do the integral
+        delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
+
+        n_t = n_pe * ( 1.0 + delta_n )
+
+        return n_t
 
 
 class PlasmaIonization(PlasmaRelativistic):
