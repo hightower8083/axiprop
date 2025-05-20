@@ -119,32 +119,38 @@ class PlasmaRelativistic:
 
         return Jp_ts
 
-    def get_density(self, E_loc ):
+    def get_density(self, E_ft ):
         sim = self.sim
         prop = self.sim.prop
         n_pe = self.n_pe
         k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
 
-        k_env = ScalarFieldEnvelope(*sim.EnvArgs).k_freq_base
-        laplacian_ts = -( k_env[:, None]**2 + prop.kr[None,:]**2)
-        laplacian_ts = prop.bcknd.to_device(laplacian_ts)
+        # normalized vector potential
+        A_ft = -1j * prop.omega_inv * e_mc * E_ft
+        A_ft *= (prop.kz[:, None]>0.0)
 
-        A_loc = -1j * prop.omega_inv * e_mc * E_loc
-        A_loc *= (prop.kz[:, None]>0.0)
+        # from frequency to time
+        A_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+        A_obj.t += sim.dt_shift
+        A_obj.t_loc += sim.dt_shift
+        A_t = A_obj.import_field_ft(A_ft).Field
 
-        A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
-        A_loc_obj.t += sim.dt_shift
-        A_loc_obj.t_loc += sim.dt_shift
-        A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
+        # cycle-averaged square of normalized vector potential
+        A2_t = 0.5 * np.astype( np.abs(A_t)**2, A_t.dtype )
 
-        A2_loc_t = 0.5 * np.astype( np.abs(A_loc_t)**2, A_loc_t.dtype )
-
+        # from time to frequency
         A2_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         A2_obj.t += sim.dt_shift
         A2_obj.t_loc += sim.dt_shift
-        A2_ft = A2_obj.import_field(A2_loc_t).Field_ft
+        A2_ft = A2_obj.import_field(A2_t).Field_ft
 
+        # transverse spectral transform
         A2_ts = prop.perform_transfer_TST( A2_ft )
+
+        # wakefield kernel (spectral calculation of Laplacian)
+        k_env = ScalarFieldEnvelope(*sim.EnvArgs).k_freq_base
+        laplacian_ts = -( k_env[:, None]**2 + prop.kr[None,:]**2 )
+        laplacian_ts = prop.bcknd.to_device(laplacian_ts)
 
         kernel_ts = 0.5 / k_p * laplacian_ts *  A2_ts
         kernel_ft = prop.perform_iTST_transfer(kernel_ts)
@@ -155,12 +161,12 @@ class PlasmaRelativistic:
         kernel_t = kernel_obj.import_field_ft(kernel_ft).Field
         kernel_t = np.abs(kernel_t)
 
+        # do the integral
         xi_ax = c * kernel_obj.t.copy()
-
         delta_n = np.zeros_like(kernel_t)
         delta_n = wake_kernel_integrate(kernel_t, delta_n, k_p, xi_ax)
 
-        n_t = n_pe * ( 1 + delta_n )
+        n_t = n_pe * ( 1.0 + delta_n )
 
         return n_t
 
