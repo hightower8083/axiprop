@@ -3,6 +3,7 @@ from scipy.special import jn
 
 from ..lib import PropagatorResampling
 from ..lib import PropagatorSymmetric
+from ..lib import PropagatorFFT2
 from .steppers import StepperNonParaxialPlasma
 
 
@@ -81,4 +82,20 @@ class PropagatorSymmetricStepping(
 
         self.u_ht = self.TST_stepping_matmul(
             self.TM_stepping, self.u_iht, self.u_ht)
+
+
+class PropagatorFFT2Stepping(
+    PropagatorFFT2, StepperNonParaxialPlasma):
+
+    def init_TST_stepping(self):
+        """
+        Setup data buffers for TST.
+        """
+        pass
+
+    def TST_stepping(self):
+        """
+        Forward FFT transform.
+        """
+        self.u_ht = self.fft2(self.u_iht, self.u_ht)
 

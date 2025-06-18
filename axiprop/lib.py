@@ -415,6 +415,10 @@ class PropagatorFFT2(CommonTools, StepperNonParaxial):
             self.x, self.y, self.r, self.r2 = self.init_xy_sampled(
                                                 x_axis, y_axis)
 
+        self.x_new = self.x
+        self.y_new = self.y
+        self.r_new = self.r
+
         self.init_kxy_uniform(self.x, self.y)
         self.init_TST()
 

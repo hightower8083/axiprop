@@ -24,10 +24,15 @@ class Diagnostics:
             self._pulse_center(E_ft)
             self.diags['dt_shift'].append(self.dt_shift)
 
+        if len(self.prop.shape_trns) == 1:
+            r_axis = self.prop.r_new
+        elif len(self.prop.shape_trns) == 2:
+            r_axis = (self.prop.r, self.prop.x, self.prop.y)
+
         E_obj = ScalarFieldEnvelope(*self.EnvArgs)
         E_obj.t += self.dt_shift
         E_obj.t_loc += self.dt_shift
-        E_obj = E_obj.import_field_ft( E_ft, r_axis=self.prop.r_new, transform=False )
+        E_obj = E_obj.import_field_ft( E_ft, r_axis=r_axis, transform=False )
         E_obj.z_loc = self.z_loc
 
         if 'all' in self.diags.keys():

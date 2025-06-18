@@ -31,7 +31,7 @@ class PlasmaSimple:
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
         prop = self.sim.prop
-        n_pe_z = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new )[0]
+        n_pe_z = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new ).max()
 
         if dz != 0.0:
             sim.t_axis += dz / c

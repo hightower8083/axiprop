@@ -59,8 +59,9 @@ class SolverBase(Diagnostics):
         self.EnvArgs = (self.k0, self.t_axis, n_dump_current)
         self.z_loc = z_0
         self.dt_shift = 0.0
+        kz_shaped = prop.kz.reshape(prop.kz.shape + len(prop.shape_trns)*(1,))
 
-        k_z2 = prop.kz[:, None]**2 - prop.kr[None,:]**2
+        k_z2 = kz_shaped**2 - prop.kr[None,:]**2
         cond = ( k_z2 > 0.0 )
 
         if not hasattr(prop, 'k_z') :
@@ -94,7 +95,7 @@ class SolverBase(Diagnostics):
             self.dump_mask = prop.bcknd.to_device( self.dump_mask )
 
         if not hasattr(prop, 'omega') :
-            prop.omega = prop.kz[:, None] * c
+            prop.omega = kz_shaped * c
             cond = ( prop.omega > 0.0 )
             prop.omega_inv = np.divide(1, prop.omega, where=cond)
             prop.omega_inv = np.nan_to_num(prop.omega_inv)
