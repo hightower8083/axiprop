@@ -280,7 +280,7 @@ class PropagatorResampling(CommonTools, StepperNonParaxial):
                     raise NotImplementedError(
                         "For diffracting cases `r_axis` must be uniform"
                     )
-                dr = self.r[:2].ptp()
+                dr = np.ptp(self.r[:2])
                 self.r_ext = np.arange(self.r[0], self.Rmax_new, dr)
                 self.Nr_ext = self.r_ext.size
                 self.Rmax_ext = self.r_ext[-1] + 0.5 * dr
