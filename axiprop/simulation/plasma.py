@@ -297,7 +297,6 @@ class PlasmaIonizationRefine(PlasmaIonization):
             * np.conj(
                 hilbert(Jp_loc_t_re, axis=0)[::self.refine_ord]
               )
-
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
         Jp_obj.t_loc += sim.dt_shift

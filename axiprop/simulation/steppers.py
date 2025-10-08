@@ -191,7 +191,7 @@ class StepperNonParaxialPlasma:
         """
         if u_out is None:
             out_shape = (self.Nkz, *self.shape_trns_new)
-            u_out = np.empty(out_shape, dtype=self.dtype)
+            u_out = np.zeros(out_shape, dtype=self.dtype)
 
         for ikz in range(self.Nkz):
             if self.kz[ikz] <= 0:
