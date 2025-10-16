@@ -179,7 +179,7 @@ class SolverBase(Diagnostics):
                 i_diag += 1
                 do_diag_next = False
                 if self.z_loc == self.z_0 + Lz:
-                    self.diags_to_file()
+                    self.diags_to_file(f"various_{write_dir}.h5")
                     print ('End of simulation')
                     return
 

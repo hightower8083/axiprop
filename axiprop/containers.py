@@ -318,7 +318,7 @@ class ScalarFieldEnvelope:
     @property
     def dt_to_center(self):
         fld_onax = np.abs(self.get_temporal_slice())
-        dt = np.average(self.t, weights=fld_onax)
+        dt = np.average(self.t, weights=fld_onax**2)
         return dt
 
     @property

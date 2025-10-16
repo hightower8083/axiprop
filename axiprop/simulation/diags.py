@@ -103,7 +103,7 @@ class Diagnostics:
         self.errors = np.asarray(self.errors)
         self.z_axis_err = np.asarray(self.z_axis_err)
 
-    def diags_to_file(self, file_name='various_diags.h5'):
+    def diags_to_file(self, file_name):
         self.diags_to_numpy()
         with h5py.File(file_name, mode='w') as fl:
             for diag_str in self.diags.keys():
@@ -114,7 +114,7 @@ class Diagnostics:
 
 
 class DiagsAPI:
-    def __init__(self, diags_path='./', prefix='container_'):
+    def __init__(self, diags_path='./various_diags.h5', prefix='container_'):
         self.diags_path = diags_path
         self.filelist = listdir(self.diags_path + prefix + '*.h5')
         self.filelist.sort()
@@ -127,7 +127,7 @@ class DiagsAPI:
                 )
 
         diags = {}
-        with h5py.File(various_diags_path+'/various_diags.h5', mode='r') as fl:
+        with h5py.File(various_diags_path, mode='r') as fl:
             for key in fl.keys():
                 diags[key] = fl[key][()]
         return diags

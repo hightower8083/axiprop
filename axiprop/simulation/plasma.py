@@ -62,6 +62,9 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
         else:
             E_loc = prop.perform_iTST(E_ts)
 
+        if sim.pulse_centering:
+            sim._pulse_center(E_loc)
+
         n_pe = sim.prop.bcknd.to_device( n_pe * np.ones(E_loc.shape) )
         Jp_ts = sim.prop.perform_TST( E_loc * n_pe )
         Jp_ts *= self.coef_RHS
@@ -91,6 +94,9 @@ class PlasmaRelativistic:
             E_loc = prop.step_and_iTST_transfer(E_ts, dz)
         else:
             E_loc = prop.perform_iTST_transfer(E_ts)
+
+        if sim.pulse_centering:
+            sim._pulse_center(E_loc)
 
         P_loc = -1j * e * E_loc * prop.omega_inv
 
@@ -184,6 +190,9 @@ class PlasmaIonization(PlasmaRelativistic):
         else:
             E_loc = prop.perform_iTST_transfer(E_ts)
 
+        if sim.pulse_centering:
+            sim._pulse_center(E_loc)
+
         A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
 
@@ -256,6 +265,9 @@ class PlasmaIonizationRefine(PlasmaIonization):
             E_loc = prop.step_and_iTST_transfer(E_ts, dz)
         else:
             E_loc = prop.perform_iTST_transfer(E_ts)
+
+        if sim.pulse_centering:
+            sim._pulse_center(E_loc)
 
         A_loc = -1j * prop.omega_inv * E_loc
         A_loc *= (omega>0.0)
