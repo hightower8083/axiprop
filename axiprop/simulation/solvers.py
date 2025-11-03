@@ -28,8 +28,8 @@ class SolverBase(Diagnostics):
 
         self.prop = prop
         self.t_axis = t_axis.copy()
-        self.k0 = k0
         self.z_0 = z_0
+        self.k0 = k0
 
         self.physprocs = physprocs
         self.adjust_dz = adjust_dz
@@ -165,13 +165,13 @@ class SolverBase(Diagnostics):
 
             # adjust dz to diags
             if self.z_loc <= z_diag[-1] - dz:
-                dz, do_diag_next = self._match_dz_to_diags( dz, z_diag)
+                dz, do_diag_next = self._match_dz_to_diags(dz, z_diag)
             else:
                 dz = z_diag[-1] - self.z_loc
                 do_diag_next = True
 
             if self.verbose:
-               self._pbar_update(dz,iterations)
+               self._pbar_update(dz, iterations)
 
             # record diagnostics data
             if do_diag_next:
@@ -179,7 +179,7 @@ class SolverBase(Diagnostics):
                 i_diag += 1
                 do_diag_next = False
                 if self.z_loc == self.z_0 + Lz:
-                    self.diags_to_file()
+                    self.diags_to_file(f"various_{write_dir}.h5")
                     print ('End of simulation')
                     return
 
@@ -236,127 +236,44 @@ class SolverImplicitBase(SolverBase):
         return dz0
 
 
-
-class SolverExplicitMulti(SolverExplicitBase):
-
-    def _step(self, En_ts, dz, physprocs):
-
-        method = self.method
-        bcknd = self.prop.bcknd
-
-        k1 = 0.0
-        for physproc in physprocs:
-            k1 += physproc.get_RHS( En_ts )
-
-        if method in ['Ralston', 'MP', 'RK4']:
-            if method=='Ralston':
-                C_k2 = 2./3
-            else:
-                C_k2 = 1./2
-
-            k2 = 0.0
-            En_pre_ts = En_ts + C_k2 * dz * k1
-            for physproc in physprocs:
-                k2 += physproc.get_RHS( En_pre_ts, C_k2 * dz )
-
-        if method=='Euler':
-            k_tot = k1
-            k_lower = k1
-        elif method=='MP':
-            k_tot = k2
-            k_lower = k1
-        elif method=='Ralston':
-            k_tot = 0.25 * k1 + 0.75 * k2
-            k_lower = k1
-        elif method == 'RK4':
-            k3 = 0.0
-            En_pre_ts = En_ts + 0.5 * dz * k2
-            for physproc in physprocs:
-                k3 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
-
-            En_pre_ts = En_ts + dz * k3
-
-            k4 = 0.0
-            for physproc in physprocs:
-                k4 += physproc.get_RHS( En_pre_ts, dz )
-
-            k_tot = ( k1 + 2 * k2 + 2 * k3 + k4 ) / 6
-            k_lower = k2
-
-        val_intgral = 0.5 * bcknd.sum(
-            bcknd.abs(k_tot) + bcknd.abs(k_lower)
-        )
-
-        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
-
-        if val_intgral>0:
-            err = err_abs / val_intgral
-        else:
-            err = 0.0
-
-        # field advance
-        En_ts_next = En_ts + dz * k_tot
-        En_ts_next = self.prop.step_simple(En_ts_next, dz)
-
-        return En_ts_next, err, 0
-
-    def _opt_dz( self, dz, dz0, err, iterations=None ):
-        if err == 0:
-            return dz0
-
-        if self.growth_rate is not None:
-            if err<self.err_max:
-                dz *= self.growth_rate
-            else:
-                ErrFact = self.err_max / err
-                dz *= 0.95 * ErrFact**0.5
-        else:
-            ErrFact = self.err_max / err
-            dz *= 0.95 * ErrFact**0.5
-
-        if dz<self.dz_min:
-            dz = self.dz_min
-
-        return dz
-
-
 class SolverEuler(SolverExplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
-        k_tot = 0.0
+        K1 = 0.0
         for physproc in physprocs:
-            k_tot += physproc.get_RHS( En_ts )
+            K1 += physproc.get_RHS( En_ts )
 
         # field advance
-        En_ts_next = En_ts + dz * k_tot
+        En_ts_next = En_ts + dz * K1
         En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
         return En_ts_next, 0.0, 0
 
 
-class SolverMP(SolverExplicitBase):
+class SolverMidpointExplicit(SolverExplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
 
         bcknd = self.prop.bcknd
 
-        k1 = 0.0
+        K1 = 0.0
         for physproc in physprocs:
-            k1 += physproc.get_RHS( En_ts )
+            K1 += physproc.get_RHS( En_ts )
 
-        k2 = 0.0
-        En_pre_ts = En_ts + 0.5 * dz * k1
+        En_pre_ts = En_ts + 0.5 * dz * K1
+
+        K2 = 0.0
         for physproc in physprocs:
-            k2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+            K2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
 
-        k_tot = k2
-        k_lower = k1
+        K_tot = K2
+        K_lower = K1
 
         val_intgral = 0.5 * bcknd.sum(
-            bcknd.abs(k_tot) + bcknd.abs(k_lower)
+            bcknd.abs(K_tot) + bcknd.abs(K_lower)
         )
 
-        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
+        err_abs = 0.5 * bcknd.sum( bcknd.abs( K_tot - K_lower ) )
 
         if val_intgral>0:
             err = err_abs / val_intgral
@@ -364,7 +281,49 @@ class SolverMP(SolverExplicitBase):
             err = 0.0
 
         # field advance
-        En_ts_next = En_ts + dz * k_tot
+        En_ts_next = En_ts + dz * K_tot
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
+
+        return En_ts_next, err, 0
+
+
+class SolverRK3(SolverExplicitBase):
+
+    def _step(self, En_ts, dz, physprocs):
+
+        bcknd = self.prop.bcknd
+
+        K1 = 0.0
+        for physproc in physprocs:
+            K1 += physproc.get_RHS( En_ts )
+
+        En_pre_ts = En_ts + 0.5 * dz * K1
+
+        K2 = 0.0
+        for physproc in physprocs:
+            K2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+
+        En_pre_ts = En_ts + dz * ( 2*K2 - K1 )
+
+        K3 = 0.0
+        for physproc in physprocs:
+            K3 += physproc.get_RHS( En_pre_ts, dz )
+
+        K_tot = ( K1 + 4*K2 + K3 ) / 6
+        K_lower = K2
+
+        val_intgral = 0.5 * bcknd.sum(
+            bcknd.abs(K_tot) + bcknd.abs(K_lower)
+        )
+
+        err_abs = 0.5 * bcknd.sum( bcknd.abs(K_tot - K_lower) )
+
+        if val_intgral>0:
+            err = err_abs / val_intgral
+        else:
+            err = 0.0
+
+        En_ts_next = En_ts + dz * K_tot
         En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
         return En_ts_next, err, 0
@@ -376,49 +335,49 @@ class SolverRK4(SolverExplicitBase):
 
         bcknd = self.prop.bcknd
 
-        k1 = 0.0
+        K1 = 0.0
         for physproc in physprocs:
-            k1 += physproc.get_RHS( En_ts )
+            K1 += physproc.get_RHS( En_ts )
 
-        En_pre_ts = En_ts + 0.5 * dz * k1
+        En_pre_ts = En_ts + 0.5 * dz * K1
 
-        k2 = 0.0
+        K2 = 0.0
         for physproc in physprocs:
-            k2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+            K2 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
 
-        En_pre_ts = En_ts + 0.5 * dz * k2
+        En_pre_ts = En_ts + 0.5 * dz * K2
 
-        k3 = 0.0
+        K3 = 0.0
         for physproc in physprocs:
-            k3 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
+            K3 += physproc.get_RHS( En_pre_ts, 0.5 * dz )
 
-        En_pre_ts = En_ts + dz * k3
+        En_pre_ts = En_ts + dz * K3
 
-        k4 = 0.0
+        K4 = 0.0
         for physproc in physprocs:
-            k4 += physproc.get_RHS( En_pre_ts, dz )
+            K4 += physproc.get_RHS( En_pre_ts, dz )
 
-        k_tot = ( k1 + 2*k2 + 2*k3 + k4 ) / 6
-        k_lower = k2 #2*k2 - k1
+        K_tot = ( K1 + 2*K2 + 2*K3 + K4 ) / 6
+        K_lower = K2 #2*k2 - k1
 
         val_intgral = 0.5 * bcknd.sum(
-            bcknd.abs(k_tot) + bcknd.abs(k_lower)
+            bcknd.abs(K_tot) + bcknd.abs(K_lower)
         )
 
-        err_abs = 0.5 * bcknd.sum( bcknd.abs(k_tot-k_lower) )
+        err_abs = 0.5 * bcknd.sum( bcknd.abs( K_tot - K_lower ) )
 
         if val_intgral>0:
             err = err_abs / val_intgral
         else:
             err = 0.0
 
-        En_ts_next = En_ts + dz * k_tot
+        En_ts_next = En_ts + dz * K_tot
         En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
         return En_ts_next, err, 0
 
 
-class SolverAM1(SolverImplicitBase):
+class SolverBackwardEuler(SolverImplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
 
@@ -426,56 +385,21 @@ class SolverAM1(SolverImplicitBase):
 
         En_ts_prev = En_ts.copy()
         err = 1.0
-        iterations = 0
+        iterations = 1
 
-        while err>self.err_max and iterations<=self.iterations_max:
-            self.k0 = 0.0
-            for physproc in physprocs:
-                self.k0 += physproc.get_RHS( En_ts_prev, dz )
-
-            En_ts_next = En_ts + dz * self.k0
-
-            val_intgral = 0.5 * bcknd.sum(
-                bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
-            )
-
-            err_abs = 0.5 * bcknd.sum( bcknd.abs(En_ts_next-En_ts_prev) )
-
-            if val_intgral>0:
-                err = err_abs / val_intgral
-            else:
-                err = 0.0
-
-            En_ts_prev = En_ts_next.copy()
-            iterations += 1
-
-        En_ts_next = self.prop.step_simple(En_ts_next, dz)
-
-        return En_ts_next, err, iterations
-
-
-class SolverAM2(SolverImplicitBase):
-
-    def _step(self, En_ts, dz, physprocs, propagate_coeff=False):
-
-        bcknd = self.prop.bcknd
-
-        En_ts_prev = En_ts.copy()
-        err = 1.0
-        iterations = 0
-
-        self.k0 = 0.0
+        K1 = 0.0
         for physproc in physprocs:
-            self.k0 += physproc.get_RHS( En_ts_prev )
+            K1 += physproc.get_RHS( En_ts_prev )
 
-        En_ts_prev = En_ts + dz * self.k0
+        En_ts_prev = En_ts + dz * K1
 
-        while err>self.err_max and iterations<=self.iterations_max:
-            self.k1 = 0.0
+        while err>self.err_max and iterations<self.iterations_max:
+
+            K1 = 0.0
             for physproc in physprocs:
-                self.k1 += physproc.get_RHS( En_ts_prev, dz )
+                K1 += physproc.get_RHS( En_ts_prev, dz )
 
-            En_ts_next = En_ts + 0.5 * dz * ( self.k0 + self.k1 )
+            En_ts_next = En_ts + dz * K1
 
             val_intgral = 0.5 * bcknd.sum(
                 bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
@@ -493,35 +417,32 @@ class SolverAM2(SolverImplicitBase):
 
         En_ts_next = self.prop.step_simple(En_ts_next, dz)
 
-        if propagate_coeff:
-            self.k0 = self.prop.step_simple(self.k0, dz)
-            self.k1 = self.prop.step_simple(self.k1, dz)
-
         return En_ts_next, err, iterations
 
 
-class SolverAM3(SolverImplicitBase):
-
-    _step0 = SolverAM2._step
+class SolverCrankNicolson(SolverImplicitBase):
 
     def _step(self, En_ts, dz, physprocs):
 
         bcknd = self.prop.bcknd
 
-        if not hasattr(self, 'k1'):
-            return self._step0(En_ts, dz, physprocs, propagate_coeff=True)
-
         En_ts_prev = En_ts.copy()
         err = 1.0
-        iterations = 0
+        iterations = 1
 
-        while err>self.err_max and iterations<=self.iterations_max:
+        K1 = 0.0
+        for physproc in physprocs:
+            K1 += physproc.get_RHS( En_ts_prev )
 
-            self.k2 = 0.0
+        En_ts_prev = En_ts + dz * K1
+
+        while err>self.err_max and iterations<self.iterations_max:
+
+            K2 = 0.0
             for physproc in physprocs:
-                self.k2 += physproc.get_RHS( En_ts_prev, dz )
+                K2 += physproc.get_RHS( En_ts_prev, dz )
 
-            En_ts_next = En_ts + dz * ( 5./12. * self.k2  + 8./12. * self.k1 - 1./12. * self.k0)
+            En_ts_next = En_ts + 0.5 * dz * ( K1 + K2 )
 
             val_intgral = 0.5 * bcknd.sum(
                 bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
@@ -538,7 +459,50 @@ class SolverAM3(SolverImplicitBase):
             iterations += 1
 
         En_ts_next = self.prop.step_simple(En_ts_next, dz)
-        self.k0 = self.prop.step_simple(self.k1, dz)
-        self.k1 = self.prop.step_simple(self.k2, dz)
 
         return En_ts_next, err, iterations
+
+
+class SolverMidpointImplicit(SolverImplicitBase):
+
+    def _step(self, En_ts, dz, physprocs):
+
+        bcknd = self.prop.bcknd
+
+        En_ts_prev = En_ts.copy()
+        err = 1.0
+        iterations = 1
+
+        K1 = 0.0
+        for physproc in physprocs:
+            K1 += physproc.get_RHS( En_ts_prev )
+
+        En_ts_prev = En_ts + dz * K1
+
+        while err>self.err_max and iterations<self.iterations_max:
+
+            K1 = 0.0
+
+            for physproc in physprocs:
+                K1 += physproc.get_RHS( 0.5 * (En_ts + En_ts_prev), 0.5 * dz )
+
+            En_ts_next = En_ts + dz * K1
+
+            val_intgral = 0.5 * bcknd.sum(
+                bcknd.abs(En_ts_next) + bcknd.abs(En_ts_prev)
+            )
+
+            err_abs = 0.5 * bcknd.sum( bcknd.abs(En_ts_next-En_ts_prev) )
+
+            if val_intgral>0:
+                err = err_abs / val_intgral
+            else:
+                err = 0.0
+
+            En_ts_prev = En_ts_next.copy()
+            iterations += 1
+
+        En_ts_next = self.prop.step_simple(En_ts_next, dz)
+
+        return En_ts_next, err, iterations
+

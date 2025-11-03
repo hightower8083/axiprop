@@ -124,7 +124,7 @@ class StepperNonParaxial:
         if Nsteps==0:
             return None
 
-        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+        u_steps = np.zeros( (Nsteps, self.Nkz, *self.shape_trns_new),
                          dtype=u.dtype)
 
         if tqdm_available and show_progress:
@@ -183,7 +183,7 @@ class StepperNonParaxial:
         if Nsteps==0:
             return None
 
-        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+        u_steps = np.zeros( (Nsteps, self.Nkz, *self.shape_trns_new),
                          dtype=u.dtype)
 
         if tqdm_available and show_progress:
@@ -357,7 +357,7 @@ class StepperFresnel:
         assert u.dtype == self.dtype
 
         if not overwrite:
-            u_step = np.empty((self.Nkz, *self.shape_trns_new),
+            u_step = np.zeros((self.Nkz, *self.shape_trns_new),
                               dtype=u.dtype)
         else:
             u_step = u
@@ -417,7 +417,7 @@ class StepperFresnel:
         if Nsteps==0:
             return None
 
-        u_steps = np.empty( (Nsteps, self.Nkz, *self.shape_trns_new),
+        u_steps = np.zeros( (Nsteps, self.Nkz, *self.shape_trns_new),
                          dtype=u.dtype)
 
         if tqdm_available and show_progress:
