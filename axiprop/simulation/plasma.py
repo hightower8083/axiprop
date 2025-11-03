@@ -81,10 +81,11 @@ class PlasmaSimpleNonuniform(PlasmaSimple):
 
 class PlasmaRelativistic:
 
-    def __init__(self, n_pe, dens_func, sim, **kw_args):
+    def __init__(self, n_pe, dens_func, sim, wake=False, **kw_args):
         self.n_pe = n_pe
         self.dens_func = dens_func
         self.sim = sim
+        self.wake = wake
         self.coef_RHS = -0.5 * mu_0 * sim.prop.omega * sim.prop.k_z_inv
 
     def get_RHS(self, E_ts, dz=0.0 ):
@@ -110,6 +111,22 @@ class PlasmaRelativistic:
 
         Jp_loc_t = - e * n_pe * P_loc_t / m_e \
             / np.sqrt( 1.0 + 0.5 * np.abs(P_loc_t)**2 * mc_m2 )
+
+        if self.wake:
+            n_pe = self.n_e.max()
+            xi_ax = c * sim.EnvArgs[1]
+            r_ax = prop.r_new[:Nr_max]
+            k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
+
+            # cycle-averaged square of normalized vector potential
+            A2_t = 0.5 * np.abs(A_loc_t)**2
+            kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
+
+            # do the integral
+            delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
+
+            delta_n *= (delta_n >= -1.0)
+            Jp_loc_t *= 1.0 + delta_n
 
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
@@ -160,7 +177,7 @@ class PlasmaIonization(PlasmaRelativistic):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
                   Z_init=0, Zmax=-1, ionization_current=True,
-                  ionization_mode='AC', Nr_max=None, **kw_args):
+                  ionization_mode='AC', Nr_max=None, wake=False,**kw_args):
 
         super().__init__(n_gas, dens_func, sim)
         self.n_gas = n_gas
@@ -168,6 +185,7 @@ class PlasmaIonization(PlasmaRelativistic):
         self.Z_init = Z_init
         self.Zmax = Zmax
         self.Nr_max = Nr_max
+        self.wake = wake
         self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
         self.ionization_current = ionization_current
@@ -209,7 +227,7 @@ class PlasmaIonization(PlasmaRelativistic):
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
         self.Uion = e * Uion # convert to Joules
 
-    def get_RHS(self, E_ts, dz=0.0 ):
+    def get_RHS(self, E_ts, dz=0.0):
         sim = self.sim
         prop = self.sim.prop
         omega = sim.prop.kz[:, None] * c
@@ -253,6 +271,22 @@ class PlasmaIonization(PlasmaRelativistic):
             (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
             self.Uion, self.Z_init, self.Zmax, self.ionization_current
         )
+
+        if self.wake:
+            n_pe = self.n_e.max()
+            xi_ax = c * sim.EnvArgs[1]
+            r_ax = prop.r_new[:Nr_max]
+            k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
+
+            # cycle-averaged square of normalized vector potential
+            A2_t = 0.5 * np.abs(A_loc_t)**2
+            kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
+
+            # do the integral
+            delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
+
+            delta_n *= (delta_n >= -1.0)
+            Jp_loc_t *= 1.0 + delta_n
 
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
@@ -341,6 +375,7 @@ class PlasmaIonizationRefine(PlasmaIonization):
             * np.conj(
                 hilbert(Jp_loc_t_re, axis=0)[::self.refine_ord]
               )
+
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
         Jp_obj.t_loc += sim.dt_shift
