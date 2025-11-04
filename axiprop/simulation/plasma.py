@@ -91,6 +91,7 @@ class PlasmaRelativistic:
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
         prop = self.sim.prop
+        omega = sim.prop.kz[:, None] * c
         n_pe = self.n_pe * self.dens_func( sim.z_loc + dz, prop.r_new )[None,:]
 
         if dz != 0.0:
@@ -113,10 +114,17 @@ class PlasmaRelativistic:
             / np.sqrt( 1.0 + 0.5 * np.abs(P_loc_t)**2 * mc_m2 )
 
         if self.wake:
-            n_pe = self.n_e.max()
+
+            A_loc = -1j * prop.omega_inv * E_loc
+            A_loc *= (omega>0.0)
+            A_loc_obj = ScalarFieldEnvelope(*sim.EnvArgs)
+            A_loc_obj.t += sim.dt_shift
+            A_loc_obj.t_loc += sim.dt_shift
+            A_loc_t = A_loc_obj.import_field_ft(A_loc).Field
+
             xi_ax = c * sim.EnvArgs[1]
-            r_ax = prop.r_new[:Nr_max]
-            k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
+            r_ax = prop.r_new.copy()
+            k_p = np.sqrt( 4 * np.pi * r_e * self.n_pe )
 
             # cycle-averaged square of normalized vector potential
             A2_t = 0.5 * np.abs(A_loc_t)**2
