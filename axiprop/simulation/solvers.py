@@ -133,6 +133,8 @@ class SolverBase(Diagnostics):
             self._pbar_init(Lz)
 
         i_diag = 0
+        self._record_diags(En_ts, physprocs, i_diag, write_dir)
+        i_diag += 1
         do_diag_next = False
 
         while (self.z_loc <= self.z_0 + Lz) and self.is_finite(En_ts):
