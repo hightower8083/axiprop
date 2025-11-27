@@ -522,7 +522,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
 
         Rmax_resolved = np.pi * dz / kz_max / dr_est
         if Rmax_resolved < self.Rmax_new:
-            print ('Requested x-axis is too large')
+            print ('Requested r-axis is too large')
 
         self.Nr_ext = int(np.ceil( np.pi * dz / kz_max / dr_est / dr_new_est  ))
         if self.Nr_ext <= self.Nr:
