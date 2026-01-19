@@ -282,19 +282,21 @@ class PlasmaIonization(PlasmaRelativistic):
 
         if self.wake:
             n_pe = self.n_e.max()
-            xi_ax = c * sim.EnvArgs[1]
-            r_ax = prop.r_new[:Nr_max]
-            k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
 
-            # cycle-averaged square of normalized vector potential
-            A2_t = 0.5 * np.abs(A_loc_t)**2
-            kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
+            if n_pe>0:
+                xi_ax = c * sim.EnvArgs[1]
+                r_ax = prop.r_new[:Nr_max]
+                k_p = np.sqrt( 4 * np.pi * r_e * n_pe )
 
-            # do the integral
-            delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
+                # cycle-averaged square of normalized vector potential
+                A2_t = 0.5 * np.abs(A_loc_t)**2
+                kernel_t = 0.5 / k_p * laplacian_fd(A2_t, xi_ax, r_ax)
 
-            delta_n *= (delta_n >= -1.0)
-            Jp_loc_t *= 1.0 + delta_n
+                # do the integral
+                delta_n = wake_kernel_integrate(kernel_t, k_p, xi_ax)
+
+                delta_n *= (delta_n >= -1.0)
+                Jp_loc_t *= 1.0 + delta_n
 
         Jp_obj = ScalarFieldEnvelope(*sim.EnvArgs)
         Jp_obj.t += sim.dt_shift
