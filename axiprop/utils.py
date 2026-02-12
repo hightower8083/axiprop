@@ -340,7 +340,8 @@ def export_to_lasy(Container_in, laser_in=None, polarization=(1,0), dimensions='
     if dimensions == 'rt':
         assert (np.allclose(laser.grid.azimuthal_modes, m_axis))
 
-        field_3d = np.zeros_like(laser.grid.get_temporal_field())
+        lasy_field = laser.grid.get_temporal_field()
+        field_3d = np.zeros(lasy_field.shape, dtype=lasy_field.dtype)
 
         for im in range(m_axis.size):
             Container = Containers[im]
