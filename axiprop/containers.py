@@ -383,7 +383,10 @@ class ScalarFieldEnvelope:
         return self
 
     def import_field_ft(self, Field, t_loc=None, r_axis=None,
-                        transform=True, clean_boundaries=False,
+                        transform=True,
+                        clean_boundaries_r=False,
+                        clean_boundaries_t=False,
+                        clean_boundaries=False,
                         make_copy=False):
         """
         Import the field from the frequency domain
@@ -430,17 +433,21 @@ class ScalarFieldEnvelope:
         elif len(Field[0].shape)==2:
             self.k_freq_base_shaped = self.k_freq_base[:, None, None]
 
-        if transform:
-            self.frequency_to_time()
-
         if clean_boundaries:
+            clean_boundaries_r = True
+            clean_boundaries_t = True
 
-            if not transform:
-                self.frequency_to_time()
+        if clean_boundaries_r:
+            self.Field_ft = apply_boundary_r(self.Field_ft, self.dump_mask_r)
+
+        if clean_boundaries_t:
+            self.frequency_to_time()
             self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
             self.time_to_frequency()
 
-            self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
+        if transform:
+            self.frequency_to_time()
+
 
         return self
 
@@ -865,7 +872,10 @@ class ScalarField(ScalarFieldEnvelope):
         return self
 
     def import_field_ft(self, Field, t_loc=None, r_axis=None,
-                        transform=True, clean_boundaries=False,
+                        transform=True,
+                        clean_boundaries_r=False,
+                        clean_boundaries_t=False,
+                        clean_boundaries=False,
                         make_copy=False):
         """
         Import the field from the frequency domain
@@ -911,16 +921,20 @@ class ScalarField(ScalarFieldEnvelope):
         elif len(Field[0].shape)==2:
             self.k_freq_shaped = self.k_freq[:, None, None]
 
-        if transform:
-            self.frequency_to_time()
-
         if clean_boundaries:
-            if not transform:
-                self.frequency_to_time()
-            self.Field = apply_boundary_t(self.Field, self.dump_mask)
+            clean_boundaries_r = True
+            clean_boundaries_t = True
+
+        if clean_boundaries_r:
+            self.Field_ft = apply_boundary_r(self.Field_ft, self.dump_mask_r)
+
+        if clean_boundaries_t:
+            self.frequency_to_time()
+            self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
             self.time_to_frequency()
 
-            self.Field = apply_boundary_r(self.Field, self.dump_mask)
+        if transform:
+            self.frequency_to_time()
 
         return self
 
