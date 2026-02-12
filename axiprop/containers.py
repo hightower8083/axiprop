@@ -434,9 +434,13 @@ class ScalarFieldEnvelope:
             self.frequency_to_time()
 
         if clean_boundaries:
+
+            if not transform:
+                self.frequency_to_time()
             self.Field = apply_boundary_t(self.Field, self.dump_mask_t)
-            self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
             self.time_to_frequency()
+
+            self.Field = apply_boundary_r(self.Field, self.dump_mask_r)
 
         return self
 
@@ -909,10 +913,14 @@ class ScalarField(ScalarFieldEnvelope):
 
         if transform:
             self.frequency_to_time()
-            if clean_boundaries:
-                self.Field = apply_boundary_t(self.Field, self.dump_mask)
-                self.Field = apply_boundary_r(self.Field, self.dump_mask)
-                self.time_to_frequency()
+
+        if clean_boundaries:
+            if not transform:
+                self.frequency_to_time()
+            self.Field = apply_boundary_t(self.Field, self.dump_mask)
+            self.time_to_frequency()
+
+            self.Field = apply_boundary_r(self.Field, self.dump_mask)
 
         return self
 
