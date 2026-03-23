@@ -100,6 +100,8 @@ class CommonTools:
             self.kz = kz_axis.copy()
             self.Nkz = self.kz.size
 
+        self.kz *= (self.kz>0)
+
     def init_kr(self, Rmax, Nr):
         """
         Setup spectral `kr` grid and related data

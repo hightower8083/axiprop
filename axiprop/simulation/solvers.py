@@ -193,7 +193,8 @@ class SolverBase(Diagnostics):
     def _pbar_update(self, dz, iterations):
         # update progress bar
         self.pbar.update(dz/self.Lz * 100)
-        print("".join( 79 * [' '] ), end='\r', flush=True)
+
+        print("".join( 79 * [' '] ), end='\r')
         print(f'distance left = {(self.z_0+self.Lz-self.z_loc)*1e3:.3f} mm; '+
               f'dz = {dz*1e6:.3f} um; iterations {iterations:d}', end='\r', flush=True)
 
