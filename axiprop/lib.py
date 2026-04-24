@@ -511,7 +511,6 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
             self.Rmax = self.r.max() + 0.5 * dr_est
 
         if type(r_axis_new) is tuple:
-            Rmax_new, Nr_new = r_axis_new
             self.r_new, self.Rmax_new, self.Nr_new = self.init_r_uniform(r_axis_new)
             dr_new_est = (self.r_new[1:] - self.r_new[:-1]).mean()
         else:
@@ -522,9 +521,10 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
 
         Rmax_resolved = np.pi * dz / kz_max / dr_est
         if Rmax_resolved < self.Rmax_new:
-            print ('Requested r-axis is too large')
+            print ('Requested r-axis is too large, try to increase Nr')
 
-        self.Nr_ext = int(np.ceil( np.pi * dz / kz_max / dr_est / dr_new_est  ))
+        self.Nr_ext = int(np.ceil( Rmax_resolved / dr_new_est  ))
+
         if self.Nr_ext <= self.Nr:
             self.Nr_ext = self.Nr
             self.r_ext = self.r.copy()
@@ -538,7 +538,6 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
 
         self.r2 = self.bcknd.to_device(self.r**2)
         self.init_kr(self.Rmax_ext, self.Nr_ext)
-
         self.init_TST()
 
     def init_TST(self):
@@ -550,29 +549,28 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
         """
         mode = self.mode
         dtype = self.dtype
-        r_ext = self.r_ext
 
+        r_ext = self.r_ext
         Rmax_ext = self.Rmax_ext
+
         Nr = self.Nr
 
         Nr_new = self.Nr_new
-        Nkr_new = Nr_new
+        Nkr_new = self.Nr_new
+        self.Nkr_new = self.Nr_new
 
-        self.Nkr_new = Nkr_new
-
-        alpha = self.alpha
-        kr = self.kr
+        alpha = self.alpha[:Nkr_new]
+        kr = self.kr[:Nkr_new]
 
         if mode==0:
             _norm_coef = 2.0 /  (
-                Rmax_ext * jn(mode+1, alpha[:Nkr_new]) )**2
+                Rmax_ext * jn(mode+1, alpha) )**2
         else:
-            _norm_coef = np.zeros_like(alpha[:Nkr_new])
+            _norm_coef = np.zeros_like(alpha)
             _norm_coef[1:] = 2.0 /  (
-                Rmax_ext * jn(mode+1, alpha[1:Nkr_new]) )**2
+                Rmax_ext * jn(mode+1, alpha[1:]) )**2
 
-        self.TM = jn(mode, r_ext[:, None] * kr[None,:Nkr_new]) \
-            * _norm_coef[None,:]
+        self.TM = jn(mode, r_ext[:, None] * kr[None,:]) * _norm_coef[None,:]
         self.TM = self.bcknd.inv_on_host(self.TM, dtype)
         self.TM = self.TM[:,:Nr]
         self.TM *= 2 * np.pi * (-1j)**mode
@@ -596,7 +594,7 @@ class PropagatorResamplingFresnel(CommonTools, StepperFresnel):
     def get_local_grid(self, dz, ikz):
         r_loc = dz * self.kr[:self.Nkr_new] / self.kz[ikz]
         r2_loc = r_loc * r_loc
-        return r_loc,  r2_loc
+        return r_loc, r2_loc
 
     def check_new_grid(self, dz):
         if self.r_axis_new is None:
@@ -840,3 +838,5 @@ class PropagatorFFT2Fresnel(CommonTools, StepperFresnel):
 
     def check_new_grid(self, dz):
         self.r_new = (self.x, self.y)
+
+
