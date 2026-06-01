@@ -183,7 +183,12 @@ class SolverBase(Diagnostics):
                 if self.z_loc == self.z_0 + Lz:
                     self.diags_to_file(f"various_{write_dir}.h5")
                     print ('End of simulation')
-                    return
+                    En_r_space = self.prop.perform_iTST(En_ts)
+                    return En_r_space
+
+        En_r_space = self.prop.perform_iTST(En_ts)
+        return En_r_space
+
 
     def _pbar_init(self, Lz):
         tqdm_bar_format = '{l_bar}{bar}| {elapsed}<{remaining} [{rate_fmt}{postfix}]'
