@@ -86,7 +86,11 @@ class PlasmaRelativistic:
         self.dens_func = dens_func
         self.sim = sim
         self.wake = wake
-        self.coef_RHS = -0.5 * mu_0 * sim.prop.omega * sim.prop.k_z_inv
+
+        omega = sim.prop.bcknd.to_host(sim.prop.omega)
+        k_z_inv = sim.prop.bcknd.to_host(sim.prop.k_z_inv)
+        self.coef_RHS = -0.5 * mu_0 * omega * k_z_inv
+        self.coef_RHS = sim.prop.bcknd.to_device(self.coef_RHS)
 
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
