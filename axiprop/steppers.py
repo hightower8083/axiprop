@@ -96,7 +96,7 @@ class StepperNonParaxial:
 
         return u_step
 
-    def steps(self, u, dz=None, z_axis=None, show_progress=True):
+    def steps(self, u, z_axis=None, dz=None, show_progress=True):
         """
         Propagate wave `u` over the multiple steps.
 
@@ -105,11 +105,11 @@ class StepperNonParaxial:
         u: 2darray of complex or double
             Spectral-radial distribution of the field to propagate.
 
+        z_axis: array of floats (m) (optional)
+            Axis over which wave should be propagated (overrides dz).
+
         dz: array of floats (m)
             Steps over which wave should be propagated.
-
-        z_axis: array of floats (m) (optional)
-            Axis over which wave should be propagated. Overrides dz.
 
         Returns
         -------
