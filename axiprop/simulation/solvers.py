@@ -137,7 +137,7 @@ class SolverBase(Diagnostics):
         i_diag += 1
         do_diag_next = False
 
-        while (self.z_loc <= self.z_0 + Lz) and self.is_finite(En_ts):
+        while (self.z_loc <= self.z_0 + Lz): # and self.is_finite(En_ts):
             # simulation step
             En_ts, err, iterations = self._step(
                 En_ts, dz,
