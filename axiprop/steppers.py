@@ -244,7 +244,7 @@ class StepperNonParaxial:
                             dtype=u.dtype)
 
         if tqdm_available and show_progress:
-            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+            pbar = tqdm(total=self.Nkz*Nsteps+Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz].copy())
@@ -254,10 +254,9 @@ class StepperNonParaxial:
 
             u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * c * t0 )
             for i_step in range(Nsteps):
-                self.u_ht[:] = u_ht0 * \
-                    self.bcknd.exp( 1j * (z_axis[i_step]-z0) * k_loc )
-                self.iTST()
-                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht )
+                u_steps[i_step, :] += self.bcknd.to_host(u_ht0 * \
+                    self.bcknd.exp( 1j * (z_axis[i_step]-z0) * k_loc
+                ))
 
                 if tqdm_available and show_progress:
                     pbar.update(1)
@@ -265,6 +264,17 @@ class StepperNonParaxial:
                     print(f"Done step {i_step} of {Nsteps} "+ \
                           f"for wavelength {ikz+1} of {self.Nkz}",
                           end='\r', flush=True)
+
+        for i_step in range(Nsteps):
+            self.u_ht[:] = self.bcknd.to_device(u_steps[i_step, :])
+            self.iTST()
+            u_steps[i_step, :] = self.bcknd.to_host(self.u_iht)
+
+            if tqdm_available and show_progress:
+                pbar.update(1)
+            elif show_progress and not tqdm_available:
+                print(f"Done iTST for step {i_step} of {Nsteps}",
+                      end='\r', flush=True)
 
         if tqdm_available and show_progress:
             pbar.close()
@@ -298,7 +308,7 @@ class StepperNonParaxial:
                          dtype=u.dtype)
 
         if tqdm_available and show_progress:
-            pbar = tqdm(total=self.Nkz*Nsteps, bar_format=bar_format)
+            pbar = tqdm(total=self.Nkz*Nsteps+Nsteps, bar_format=bar_format)
 
         for ikz in range(self.Nkz):
             self.u_loc = self.bcknd.to_device(u[ikz].copy())
@@ -309,11 +319,9 @@ class StepperNonParaxial:
             u_ht0 = self.u_ht.copy() * np.exp( 1j * self.kz[ikz] * z0 )
 
             for i_step in range(Nsteps):
-                self.u_ht[:] = u_ht0 * self.bcknd.exp(
-                    -1j * k_loc * c * ( t_axis[i_step] - t0 )
-                )
-                self.iTST()
-                u_steps[i_step, :] += self.bcknd.to_host(self.u_iht)
+                u_steps[i_step, :] += self.bcknd.to_host(u_ht0 * \
+                    self.bcknd.exp( -1j * c * (t_axis[i_step]-t0) * k_loc
+                ))
 
                 if tqdm_available and show_progress:
                     pbar.update(1)
@@ -321,6 +329,17 @@ class StepperNonParaxial:
                     print(f"Done step {i_step} of {Nsteps} "+ \
                           f"for wavelength {ikz+1} of {self.Nkz}",
                           end='\r', flush=True)
+
+        for i_step in range(Nsteps):
+            self.u_ht[:] = self.bcknd.to_device(u_steps[i_step, :])
+            self.iTST()
+            u_steps[i_step, :] = self.bcknd.to_host(self.u_iht)
+
+            if tqdm_available and show_progress:
+                pbar.update(1)
+            elif show_progress and not tqdm_available:
+                print(f"Done iTST for step {i_step} of {Nsteps}",
+                      end='\r', flush=True)
 
         if tqdm_available and show_progress:
             pbar.close()
