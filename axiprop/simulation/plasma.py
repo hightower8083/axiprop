@@ -9,7 +9,9 @@ from mendeleev import element as table_element
 from ..containers import ScalarFieldEnvelope
 from ..utils import refine1d, refine1d_TR
 from .inline_methods import get_plasma_ADK
+from .inline_methods import get_plasma_PPT
 from .inline_methods import get_plasma_ADK_ref
+from .inline_methods import get_plasma_PPT_ref
 from .inline_methods import get_OFI_heating
 from .inline_methods import wake_kernel_integrate
 from .inline_methods import laplacian_fd
@@ -200,6 +202,12 @@ class PlasmaIonization(PlasmaRelativistic):
         self.wake = wake
         self.dt = sim.t_axis[1] - sim.t_axis[0]
         self.make_ADK(my_element, ionization_mode)
+        zmax_eff = self.Uion.size if self.Zmax < 0 else self.Zmax
+        if not (0 <= self.Z_init <= zmax_eff <= self.Uion.size):
+            raise ValueError(
+                f'Expected 0 <= Z_init <= Zmax <= {self.Uion.size}; '
+                f'got Z_init={self.Z_init}, Zmax={self.Zmax}'
+            )
         self.ionization_current = ionization_current
 
         omega_shift = sim.prop.kz[:, None] * c - sim.omega0
@@ -238,6 +246,14 @@ class PlasmaIonization(PlasmaRelativistic):
 
         self.adk_exp_prefactor = -2./3 * ( Uion/UH )**(3./2) * Ea
         self.Uion = e * Uion # convert to Joules
+
+    def _get_plasma_response(self, E_loc_t, A_loc_t, n_gas):
+        """Return the envelope plasma response (overridden by rate models)."""
+        return get_plasma_ADK(
+            E_loc_t, A_loc_t, self.dt, n_gas,
+            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        )
 
     def get_RHS(self, E_ts, dz=0.0):
         sim = self.sim
@@ -278,10 +294,8 @@ class PlasmaIonization(PlasmaRelativistic):
         A_loc_obj.t_loc += sim.dt_shift
         A_loc_t = A_loc_obj.import_field_ft(A_loc[:,:Nr_max]).Field
 
-        Jp_loc_t, self.n_e, self.T_e = get_plasma_ADK(
-            E_loc_t, A_loc_t, self.dt, n_gas,
-            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        Jp_loc_t, self.n_e, self.T_e = self._get_plasma_response(
+            E_loc_t, A_loc_t, n_gas
         )
 
         if self.wake:
@@ -320,6 +334,58 @@ class PlasmaIonization(PlasmaRelativistic):
         return Jp_ts
 
 
+
+
+class PlasmaIonizationPPT(PlasmaIonization):
+    """Cycle-averaged finite-frequency PPT ionization for an optical envelope.
+
+    Uses abs(envelope E) and the carrier frequency sim.omega0. It follows the
+    effective-hydrogenic, single-active-electron m=0 approximation used by the
+    existing Axiprop ADK model. This cycle-averaged rate must not be applied to
+    the reconstructed carrier-resolved real field.
+    """
+
+    def __init__(self, n_gas, dens_func, sim, my_element,
+                 Z_init=0, Zmax=-1, ionization_current=True,
+                 Nr_max=None, wake=False, **kw_args):
+        super().__init__(
+            n_gas, dens_func, sim, my_element,
+            Z_init=Z_init, Zmax=Zmax,
+            ionization_current=ionization_current,
+            ionization_mode='AC', Nr_max=Nr_max, wake=wake, **kw_args
+        )
+
+    def make_ADK(self, my_element, ionization_mode='AC'):
+        """Prepare PPT atomic parameters (name kept for parent compatibility)."""
+        Uion = np.asarray(list(table_element(my_element).ionenergies.values()),
+                          dtype=float)
+        if Uion.size == 0 or np.any(~np.isfinite(Uion)) or np.any(Uion <= 0.0):
+            raise ValueError(f'No valid ionization energies found for {my_element!r}')
+
+        Z_states = np.arange(Uion.size, dtype=float) + 1.0
+        Ip_au = Uion / (2.0 * UH)
+        n_eff = Z_states * np.sqrt(UH / Uion)
+        l_eff = n_eff[0] - 1.0
+        C2 = 2.0**(2.0*n_eff) / (
+            n_eff * gamma_func(n_eff + l_eff + 1.0)
+            * gamma_func(n_eff - l_eff)
+        )
+        if self.sim.omega0 <= 0.0:
+            raise ValueError('PPT ionization requires sim.omega0 > 0')
+
+        self.ppt_pack = (Ip_au, n_eff, C2)
+        self.omega_au = self.sim.omega0 / omega_a
+        self.Uion = e * Uion
+
+    def _get_plasma_response(self, E_loc_t, A_loc_t, n_gas):
+        return get_plasma_PPT(
+            E_loc_t, A_loc_t, self.dt, n_gas,
+            self.ppt_pack, self.Uion, self.omega_au, Ea, omega_a,
+            self.Z_init, self.Zmax, self.ionization_current
+        )
+
+
+
 class PlasmaIonizationRefine(PlasmaIonization):
 
     def __init__( self, n_gas, dens_func, sim, my_element,
@@ -332,6 +398,13 @@ class PlasmaIonizationRefine(PlasmaIonization):
             ionization_mode='DC', Nr_max=Nr_max)
 
         self.refine_ord = refine_ord
+
+    def _get_refined_plasma_response(self, E_loc_t, A_loc_t, t_axis, n_gas):
+        return get_plasma_ADK_ref(
+            E_loc_t, A_loc_t, t_axis, self.sim.omega0, n_gas,
+            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
+            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        )
 
     def get_RHS(self, E_ts, dz=0.0 ):
         sim = self.sim
@@ -379,10 +452,8 @@ class PlasmaIonizationRefine(PlasmaIonization):
         else:
             t_axis = sim.t_axis.copy()
 
-        Jp_loc_t_re, self.n_e, self.T_e, self.Xi = get_plasma_ADK_ref(
-            E_loc_t, A_loc_t, t_axis, sim.omega0, n_gas,
-            (self.adk_power, self.adk_prefactor, self.adk_exp_prefactor),
-            self.Uion, self.Z_init, self.Zmax, self.ionization_current
+        Jp_loc_t_re, self.n_e, self.T_e, self.Xi = self._get_refined_plasma_response(
+            E_loc_t, A_loc_t, t_axis, n_gas
         )
 
         Jp_loc_t = np.exp(1j * sim.omega0 * sim.t_axis)[:, None] \
@@ -406,6 +477,48 @@ class PlasmaIonizationRefine(PlasmaIonization):
         Jp_ts *= self.coef_RHS
 
         return Jp_ts
+
+
+
+
+class PlasmaIonizationRefinePPT(PlasmaIonizationRefine):
+    """Carrier-resolved PPT ionization using a PPT-normalized Yudin-Ivanov rate.
+
+    Original PPT is cycle averaged and has no sub-cycle instantaneous rate.
+    This class uses its cycle-averaged PPT rate together with the Yudin-Ivanov
+    nonadiabatic phase modulation.  The phase factor is normalized to unit
+    cycle average, so the mean ionization rate is the same as in
+    PlasmaIonizationPPT.  It is intended for the refined real-field pathway.
+    """
+
+    def make_ADK(self, my_element, ionization_mode='DC'):
+        Uion = np.asarray(list(table_element(my_element).ionenergies.values()),
+                          dtype=float)
+        if Uion.size == 0 or np.any(~np.isfinite(Uion)) or np.any(Uion <= 0.0):
+            raise ValueError(f'No valid ionization energies found for {my_element!r}')
+
+        Z_states = np.arange(Uion.size, dtype=float) + 1.0
+        Ip_au = Uion / (2.0 * UH)
+        n_eff = Z_states * np.sqrt(UH / Uion)
+        l_eff = n_eff[0] - 1.0
+        C2 = 2.0**(2.0*n_eff) / (
+            n_eff * gamma_func(n_eff + l_eff + 1.0)
+            * gamma_func(n_eff - l_eff)
+        )
+        if self.sim.omega0 <= 0.0:
+            raise ValueError('PPT ionization requires sim.omega0 > 0')
+
+        self.ppt_pack = (Ip_au, n_eff, C2)
+        self.omega_au = self.sim.omega0 / omega_a
+        self.Uion = e * Uion
+
+    def _get_refined_plasma_response(self, E_loc_t, A_loc_t, t_axis, n_gas):
+        return get_plasma_PPT_ref(
+            E_loc_t, A_loc_t, t_axis, self.sim.omega0, n_gas,
+            self.ppt_pack, self.Uion, self.omega_au, Ea, omega_a,
+            self.Z_init, self.Zmax, self.ionization_current
+        )
+
 
 
 class OFI_heating:
